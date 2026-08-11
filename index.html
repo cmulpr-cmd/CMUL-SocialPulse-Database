@@ -23,25 +23,64 @@ body{font-family:'Prompt','Noto Sans Thai',sans-serif;background:#f5f6fa;overflo
 <div id="root"></div>
 <script>
 var st=document.getElementById('st');
+// Each library has multiple CDN URLs to try (fallback system)
 var libs=[
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',n:'React',g:'React'},
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',n:'ReactDOM',g:'ReactDOM'},
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js',n:'PropTypes',g:'PropTypes'},
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js',n:'Babel',g:'Babel'},
-  {s:'https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js',n:'Recharts',g:'Recharts'}
+  {n:'React',g:'React',urls:[
+    'https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js',
+    'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js'
+  ]},
+  {n:'ReactDOM',g:'ReactDOM',urls:[
+    'https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js',
+    'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js'
+  ]},
+  {n:'PropTypes',g:'PropTypes',urls:[
+    'https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js',
+    'https://unpkg.com/prop-types@15.8.1/prop-types.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js'
+  ]},
+  {n:'Babel',g:'Babel',urls:[
+    'https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.9/babel.min.js',
+    'https://unpkg.com/@babel/standalone@7.23.9/babel.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js'
+  ]},
+  {n:'Recharts',g:'Recharts',urls:[
+    'https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js',
+    'https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js',
+    'https://cdn.jsdelivr.net/npm/recharts@2.10.3/umd/Recharts.min.js',
+    'https://unpkg.com/recharts@2.10.3/umd/Recharts.min.js'
+  ]}
 ];
 function showErr(m){document.getElementById('splash').style.display='none';document.getElementById('err').style.display='flex';document.getElementById('errm').textContent=m;}
+function tryLoad(libIdx, urlIdx){
+  var lib=libs[libIdx];
+  if(urlIdx>=lib.urls.length){
+    showErr('โหลด '+lib.n+' ไม่สำเร็จจากทุก CDN — ตรวจสอบอินเทอร์เน็ต');
+    return;
+  }
+  var url=lib.urls[urlIdx];
+  var cdnName=url.indexOf('jsdelivr')>=0?'jsdelivr':url.indexOf('unpkg')>=0?'unpkg':'cdnjs';
+  st.textContent='โหลด '+lib.n+' จาก '+cdnName+'... ('+(libIdx+1)+'/'+libs.length+')';
+  var s=document.createElement('script');
+  s.src=url;
+  s.onload=function(){
+    if(lib.g && !window[lib.g]){
+      console.warn(lib.n+' loaded from '+cdnName+' but global not defined, trying next...');
+      tryLoad(libIdx, urlIdx+1);
+      return;
+    }
+    loadLib(libIdx+1);
+  };
+  s.onerror=function(){
+    console.warn(lib.n+' failed from '+cdnName+', trying next...');
+    tryLoad(libIdx, urlIdx+1);
+  };
+  document.head.appendChild(s);
+}
 function loadLib(i){
   if(i>=libs.length){st.textContent='เริ่มต้นแอป...';setTimeout(initApp,100);return;}
-  st.textContent='โหลด '+libs[i].n+'... ('+(i+1)+'/'+libs.length+')';
-  var s=document.createElement('script');s.src=libs[i].s;
-  s.crossOrigin='anonymous';
-  s.onload=function(){
-    if(libs[i].g && !window[libs[i].g]){showErr(libs[i].n+' โหลดแล้วแต่ไม่พร้อมใช้งาน — ลอง refresh');return;}
-    loadLib(i+1);
-  };
-  s.onerror=function(){showErr('โหลด '+libs[i].n+' ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต');};
-  document.head.appendChild(s);
+  tryLoad(i, 0);
 }
 loadLib(0);
 function initApp(){
