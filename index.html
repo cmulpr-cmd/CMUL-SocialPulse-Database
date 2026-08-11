@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SocialPulse - Social Media Analytics Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Prompt','Noto Sans Thai',sans-serif;background:#f5f6fa;overflow-x:hidden}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#dfe6e9;border-radius:3px}
+#splash{position:fixed;inset:0;background:linear-gradient(135deg,#0c0c1d,#1a1a3e 30%,#2d1b69 60%,#1a1a3e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity 0.5s}
+#splash.done{opacity:0;pointer-events:none}
+.spin{width:50px;height:50px;border:4px solid rgba(255,255,255,0.1);border-top-color:#a29bfe;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#err{display:none;position:fixed;inset:0;background:#1a1a2e;color:white;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9999;text-align:center;padding:40px}
+</style>
+</head>
+<body>
+<div id="splash"><div class="spin"></div><div style="color:rgba(255,255,255,0.6);margin-top:20px;font-size:14px;font-family:'Prompt',sans-serif">กำลังโหลด SocialPulse...</div><div style="color:rgba(255,255,255,0.3);margin-top:8px;font-size:11px;font-family:'Prompt',sans-serif" id="st">โหลดไลบรารี...</div></div>
+<div id="err"><div style="font-size:48px">⚠️</div><div style="font-size:20px;font-weight:700" id="errt">ไม่สามารถโหลดได้</div><div id="errm" style="font-size:14px;color:rgba(255,255,255,0.6)"></div><button onclick="location.reload()" style="padding:12px 32px;border-radius:10px;border:none;background:#6c5ce7;color:white;font-size:14px;cursor:pointer;font-family:'Prompt',sans-serif;margin-top:8px">🔄 ลองใหม่</button></div>
+<div id="root"></div>
+<script>
+var st=document.getElementById('st');
+var libs=[
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',n:'React'},
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',n:'ReactDOM'},
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js',n:'Babel'},
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.min.js',n:'Recharts'}
+];
+function showErr(m){document.getElementById('splash').style.display='none';document.getElementById('err').style.display='flex';document.getElementById('errm').textContent=m;}
+function loadLib(i){
+  if(i>=libs.length){st.textContent='เริ่มต้นแอป...';setTimeout(initApp,100);return;}
+  st.textContent='โหลด '+libs[i].n+'... ('+(i+1)+'/'+libs.length+')';
+  var s=document.createElement('script');s.src=libs[i].s;
+  s.onload=function(){loadLib(i+1);};
+  s.onerror=function(){showErr('โหลด '+libs[i].n+' ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต');};
+  document.head.appendChild(s);
+}
+loadLib(0);
+function initApp(){
+  try{
+    var src=document.getElementById('app-src').textContent;
+    var code=Babel.transform(src,{presets:['react']}).code;
+    (new Function(code))();
+    var sp=document.getElementById('splash');sp.classList.add('done');setTimeout(function(){sp.style.display='none';},500);
+  }catch(e){console.error(e);showErr('เกิดข้อผิดพลาด: '+e.message);}
+}
+</script>
+<script type="text/plain" id="app-src">
+
+
+/*
+╔══════════════════════════════════════════════════════════════╗
+║  📌 ตั้งค่า Google Apps Script URL ตรงนี้                    ║
+║  วาง URL ที่ได้จาก Deploy > Web app ลงในช่องด้านล่าง          ║
+╚══════════════════════════════════════════════════════════════╝
+*/
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxnNG4mr7hVsHUcLpBgdYtK_2-D71S-YKXg5ANujqpPeifaP3NHFP4jDCph87HP1YEJYw/exec';
+// ตัวอย่าง: const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx.../exec';
+
+const USE_SHEETS = GOOGLE_SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbxnNG4mr7hVsHUcLpBgdYtK_2-D71S-YKXg5ANujqpPeifaP3NHFP4jDCph87HP1YEJYw/exec';
+
+/* ═══ API ═══ */
+const api = {
+  async post(data) {
+    if (!USE_SHEETS) return null;
+    try {
+      const r = await fetch(GOOGLE_SCRIPT_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(data) });
+      return await r.json();
+    } catch(e) { console.error('API error:', e); return null; }
+  },
+  async get(action, params={}) {
+    if (!USE_SHEETS) return null;
+    try {
+      const url = new URL(GOOGLE_SCRIPT_URL);
+      url.searchParams.set('action', action);
+      Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
+      const r = await fetch(url.toString());
+      return await r.json();
+    } catch(e) { console.error('API error:', e); return null; }
+  }
+};
+
+/* ═══ PLATFORMS ═══ */
+const PLATFORMS = [
+  {id:'facebook',name:'Facebook',color:'#1877F2',icon:'f'},
+  {id:'instagram',name:'Instagram',color:'#E4405F',icon:'📷'},
+  {id:'twitter',name:'X (Twitter)',color:'#1DA1F2',icon:'𝕏'},
+  {id:'tiktok',name:'TikTok',color:'#010101',icon:'♪'},
+  {id:'line',name:'LINE Official',color:'#06C755',icon:'💬'},
+];
+const PERMS = [
+  {id:'view_dashboard',label:'ดูแดชบอร์ด'},
+  {id:'edit_data',label:'กรอกข้อมูล'},
+  {id:'view_reports',label:'ดูรายงาน'},
+  {id:'manage_content',label:'จัดการคอนเทนต์'},
+  {id:'view_messages',label:'ดูข้อความ'},
+  {id:'manage_ads',label:'จัดการโฆษณา'},
+  {id:'ai_analytics',label:'AI วิเคราะห์'},
+  {id:'manage_users',label:'จัดการผู้ใช้'},
+];
+const INIT_USERS = [
+  {id:1,username:'admin',password:'admin123',name:'Admin',role:'admin',approved:true,permissions:PERMS.map(p=>p.id)},
+  {id:2,username:'viewer1',password:'1234',name:'ผู้ดูรายงาน',role:'viewer',approved:true,permissions:['view_dashboard','view_reports']},
+];
+
+/* ═══ DEFAULT METRICS ═══ */
+const DEFAULT_METRICS = [
+  {id:'followers',name:'ผู้ติดตาม',unit:'คน',icon:'👥'},
+  {id:'reach',name:'การเข้าถึง',unit:'ครั้ง',icon:'📈'},
+  {id:'engagement',name:'การมีส่วนร่วม',unit:'ครั้ง',icon:'🤝'},
+  {id:'clicks',name:'คลิกลิงก์',unit:'ครั้ง',icon:'👆'},
+  {id:'shares',name:'แชร์',unit:'ครั้ง',icon:'🔄'},
+  {id:'comments',name:'คอมเมนต์',unit:'ครั้ง',icon:'💬'},
+  {id:'impressions',name:'Impressions',unit:'ครั้ง',icon:'👁️'},
+  {id:'video_views',name:'ยอดวิว',unit:'ครั้ง',icon:'▶️'},
+];
+
+/* ═══ DEMO DATA ═══ */
+function genDemoData(metrics) {
+  const data = [];
+  const now = new Date();
+  for (let d = 30; d >= 0; d--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - d);
+    const dateStr = date.toISOString().split('T')[0];
+    PLATFORMS.forEach(p => {
+      const entry = { date: dateStr, platform: p.id };
+      metrics.forEach(m => {
+        const base = m.id === 'followers' ? 50000 + Math.random()*100000 :
+                     m.id === 'reach' ? 10000 + Math.random()*50000 :
+                     m.id === 'engagement' ? 1000 + Math.random()*10000 :
+                     500 + Math.random()*5000;
+        entry[m.id] = Math.round(base * (1 + (30-d)*0.01));
+      });
+      data.push(entry);
+    });
+  }
+  return data;
+}
+
+/* ═══ STYLES ═══ */
+const S = {
+  card: {background:'white',borderRadius:16,padding:20,boxShadow:'0 2px 12px rgba(0,0,0,0.04)',border:'1px solid #f0f0f5'},
+  btn: (bg,c) => ({padding:'8px 18px',borderRadius:8,border:'none',background:bg,color:c||'white',fontSize:13,cursor:'pointer',fontWeight:600}),
+  btnO: c => ({padding:'8px 18px',borderRadius:8,border:'1px solid '+c,background:'transparent',color:c,fontSize:13,cursor:'pointer',fontWeight:600}),
+  badge: (bg,c) => ({padding:'3px 10px',borderRadius:20,background:bg,fontSize:11,color:c,fontWeight:600,display:'inline-block'}),
+  input: {width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #dfe6e9',fontSize:14,outline:'none',boxSizing:'border-box'},
+  sel: {padding:'8px 12px',borderRadius:8,border:'1px solid #dfe6e9',fontSize:13,outline:'none',background:'white'},
+  th: {padding:'10px 14px',textAlign:'left',fontSize:12,color:'#b2bec3',fontWeight:600,borderBottom:'2px solid #f0f0f5'},
+  td: {padding:'10px 14px',fontSize:13,borderBottom:'1px solid #f5f5f8'},
+  pI: c => ({width:28,height:28,borderRadius:'50%',background:c,display:'inline-flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:700,flexShrink:0}),
+};
+const PF = id => PLATFORMS.find(x=>x.id===id) || {color:'#999',icon:'?',name:id};
+const fN = n => typeof n==='number'? n.toLocaleString() : n;
+const SB = ({s}) => {
+  const m = {published:['#d4edda','#155724','เผยแพร่แล้ว'],scheduled:['#cce5ff','#004085','นัดเวลา'],draft:['#f8f9fa','#636e72','แบบร่าง'],active:['#d4edda','#155724','กำลังทำงาน'],paused:['#fff3cd','#856404','หยุดชั่วคราว'],ended:['#f8d7da','#721c24','สิ้นสุด']};
+  const [bg,c,t] = m[s]||['#f0f0f5','#636e72',s];
+  return <span style={S.badge(bg,c)}>{t}</span>;
+};
+const today = () => new Date().toISOString().split('T')[0];
+
+/* ═══ PENGUIN LOGIN ═══ */
+const Penguin = ({state, welcomeName}) => {
+  const t = state==='curious'?'rotate(-8deg)':state==='happy'?'scale(1.05)':'none';
+  return <div style={{position:'relative',width:200,height:220,margin:'0 auto'}}>
+    <svg viewBox="0 0 200 220" style={{transform:t,transition:'transform 0.5s cubic-bezier(.68,-.55,.27,1.55)',width:'100%',height:'100%'}}>
+      <ellipse cx="100" cy="210" rx="55" ry="8" fill="rgba(0,0,0,0.1)"/>
+      <ellipse cx="100" cy="135" rx="65" ry="75" fill="#2d3436"/>
+      <ellipse cx="100" cy="140" rx="45" ry="58" fill="white"/>
+      <path d={state==='covering'?"M35,100 Q15,120 55,85":"M35,110 Q15,140 45,170"} stroke="#2d3436" strokeWidth="18" strokeLinecap="round" fill="none" style={{transition:'all 0.5s'}}/>
+      <path d={state==='covering'?"M165,100 Q185,120 145,85":"M165,110 Q185,140 155,170"} stroke="#2d3436" strokeWidth="18" strokeLinecap="round" fill="none" style={{transition:'all 0.5s'}}/>
+      <ellipse cx="100" cy="82" rx="48" ry="42" fill="#2d3436"/>
+      <ellipse cx="100" cy="85" rx="40" ry="32" fill="white"/>
+      {state==='covering' ? <React.Fragment>
+        <ellipse cx="72" cy="82" rx="28" ry="22" fill="#2d3436" opacity="0.9"/>
+        <ellipse cx="128" cy="82" rx="28" ry="22" fill="#2d3436" opacity="0.9"/>
+        <path d="M75,82 Q82,78 89,82" stroke="white" strokeWidth="2" fill="none"/>
+        <path d="M111,82 Q118,78 125,82" stroke="white" strokeWidth="2" fill="none"/>
+      </React.Fragment> : <React.Fragment>
+        <ellipse cx={state==='curious'?83:85} cy="80" rx="13" ry="14" fill="white" stroke="#2d3436" strokeWidth="1"/>
+        <ellipse cx={state==='curious'?123:115} cy="80" rx="13" ry="14" fill="white" stroke="#2d3436" strokeWidth="1"/>
+        <circle cx={state==='curious'?86:87} cy={state==='happy'?78:81} r={state==='happy'?5:6} fill="#2d3436"/>
+        <circle cx={state==='curious'?120:113} cy={state==='happy'?78:81} r={state==='happy'?5:6} fill="#2d3436"/>
+        {state==='curious' && <React.Fragment><path d="M73,68 Q83,62 93,68" stroke="#2d3436" strokeWidth="2.5" fill="none"/><path d="M113,64 Q123,60 133,68" stroke="#2d3436" strokeWidth="2.5" fill="none"/></React.Fragment>}
+        {state==='happy' && <React.Fragment><circle cx="82" cy="75" r="2" fill="white"/><circle cx="108" cy="75" r="2" fill="white"/></React.Fragment>}
+      </React.Fragment>}
+      {(state==='happy'||state==='covering') && <React.Fragment><ellipse cx="68" cy="92" rx="10" ry="6" fill="#ff9ff3" opacity="0.5"/><ellipse cx="132" cy="92" rx="10" ry="6" fill="#ff9ff3" opacity="0.5"/></React.Fragment>}
+      <path d={state==='happy'?"M90,95 L100,103 L110,95 Z":"M92,95 L100,102 L108,95 Z"} fill="#fdcb6e" stroke="#f39c12" strokeWidth="1"/>
+      {state==='happy' && <path d="M88,100 Q100,112 112,100" stroke="#2d3436" strokeWidth="2" fill="none"/>}
+      <ellipse cx="78" cy="207" rx="18" ry="7" fill="#fdcb6e"/><ellipse cx="122" cy="207" rx="18" ry="7" fill="#fdcb6e"/>
+      <path d="M90,118 L100,123 L110,118 L100,128 Z" fill="#6c5ce7" opacity="0.8"/>
+    </svg>
+    {state==='curious' && <div style={{position:'absolute',top:-10,right:10,background:'white',borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 8px rgba(0,0,0,0.15)',fontSize:20,fontWeight:'bold',color:'#6c5ce7',animation:'bobble 0.6s ease-in-out infinite alternate'}}>?</div>}
+    {state==='happy' && <React.Fragment><div style={{position:'absolute',top:0,left:15,fontSize:16,animation:'floatUp 1.5s infinite',color:'#e84393'}}>♥</div><div style={{position:'absolute',top:10,right:20,fontSize:12,animation:'floatUp 1.8s infinite 0.3s',color:'#fd79a8'}}>♥</div></React.Fragment>}
+    {state==='happy' && welcomeName && <div style={{position:'absolute',bottom:-35,left:'50%',transform:'translateX(-50%)',whiteSpace:'nowrap',fontSize:14,fontWeight:600,color:'#6c5ce7',animation:'fadeInUp 0.5s'}}>ยินดีต้อนรับคุณ {welcomeName} 🎉</div>}
+  </div>;
+};
+
+/* ═══ LOGIN PAGE ═══ */
+const LoginPage = ({users, onLogin, onReq}) => {
+  const [u,sU]=useState('');const [p,sP]=useState('');const [ps,sPs]=useState('idle');const [mu,sMu]=useState(null);
+  const [pf,sPf]=useState(false);const [sr,sSr]=useState(false);const [rn,sRn]=useState('');const [ru,sRu]=useState('');const [rp,sRp]=useState('');
+  const [rs,sRs]=useState(false);const [err,sErr]=useState('');const [shake,sSh]=useState(false);
+  useEffect(()=>{
+    if(pf){sPs('covering');return;}
+    if(u.length>=3){const f=users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.approved);if(f){sMu(f);sPs('happy');}else{sMu(null);sPs('curious');}}
+    else{sMu(null);sPs('idle');}
+  },[u,pf,users]);
+  const doL=()=>{const user=users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.password===p&&x.approved);if(user)onLogin(user);else{sErr('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');sSh(true);setTimeout(()=>sSh(false),600);}};
+  const doR=()=>{if(rn&&ru&&rp){onReq({name:rn,username:ru,password:rp});sRs(true);setTimeout(()=>{sSr(false);sRs(false);},2000);}};
+  const hearts=p.split('').map(()=>'♥').join('');
+  const inp=(label,val,set,opts={})=><div style={{marginBottom:opts.mb||16}}>
+    <label style={{fontSize:12,color:'rgba(255,255,255,0.5)',marginBottom:4,display:'block'}}>{label}</label>
+    <div style={{position:'relative'}}>
+      {opts.ov && <input type="text" readOnly value={opts.ov} style={{width:'100%',padding:'12px 16px 12px 40px',borderRadius:12,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.08)',color:'#e84393',fontSize:18,letterSpacing:4,outline:'none',boxSizing:'border-box',position:'absolute',top:0,left:0,pointerEvents:'none',zIndex:1}}/>}
+      <input type={opts.type||'text'} value={val} onChange={e=>{set(e.target.value);sErr('');}} onFocus={opts.onFocus} onBlur={opts.onBlur} onKeyDown={opts.onKey} placeholder={opts.ph}
+        style={{width:'100%',padding:'12px 16px 12px 40px',borderRadius:12,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.08)',color:opts.ov?'transparent':'white',fontSize:15,outline:'none',boxSizing:'border-box',position:'relative',zIndex:opts.ov?2:1,caretColor:'#a29bfe'}}/>
+      <span style={{position:'absolute',left:14,top:'50%',transform:'translateY(-50%)',color:opts.ic||'rgba(255,255,255,0.3)',fontSize:16,zIndex:3,pointerEvents:'none'}}>{opts.icon||'👤'}</span>
+    </div>
+  </div>;
+  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0c0c1d,#1a1a3e 30%,#2d1b69 60%,#1a1a3e)',position:'relative',overflow:'hidden'}}>
+    <div style={{width:420,maxWidth:'92vw',padding:'40px 36px',borderRadius:24,background:'rgba(255,255,255,0.06)',backdropFilter:'blur(20px)',border:'1px solid rgba(255,255,255,0.1)',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',animation:shake?'shakeX 0.6s':'none',position:'relative',zIndex:1}}>
+      <div style={{textAlign:'center',marginBottom:8}}><div style={{fontSize:24,fontWeight:800,color:'white'}}><span style={{color:'#a29bfe'}}>📊</span> SocialPulse</div><div style={{fontSize:12,color:'rgba(255,255,255,0.4)',marginTop:2}}>Social Media Analytics Dashboard</div></div>
+      <Penguin state={ps} welcomeName={mu?.name}/><div style={{height:mu?30:10}}/>
+      {!sr ? <React.Fragment>
+        {inp('ชื่อผู้ใช้',u,sU,{ph:'กรอกชื่อผู้ใช้...',icon:'👤',onFocus:()=>sPf(false)})}
+        {inp('รหัสผ่าน',p,sP,{ph:'กรอกรหัสผ่าน...',type:'password',icon:'♥',ic:'#e84393',ov:hearts,onFocus:()=>sPf(true),onBlur:()=>sPf(false),onKey:e=>{if(e.key==='Enter')doL();}})}
+        {err && <div style={{color:'#ff6b6b',fontSize:13,marginBottom:12,textAlign:'center',animation:'fadeInUp 0.3s'}}>{err}</div>}
+        <button onClick={doL} style={{width:'100%',padding:14,borderRadius:12,border:'none',background:'linear-gradient(135deg,#6c5ce7,#a29bfe)',color:'white',fontSize:16,fontWeight:700,cursor:'pointer',marginBottom:12,boxShadow:'0 4px 15px rgba(108,92,231,0.4)'}}>เข้าสู่ระบบ</button>
+        <button onClick={()=>sSr(true)} style={{width:'100%',padding:12,borderRadius:12,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer'}}>✉️ ขอเข้าใช้บริการ</button>
+        <div style={{textAlign:'center',marginTop:16,fontSize:11,color:'rgba(255,255,255,0.25)'}}>Demo: admin / admin123</div>
+        {!USE_SHEETS && <div style={{textAlign:'center',marginTop:8,fontSize:10,color:'rgba(255,255,255,0.2)'}}>⚠️ โหมด Demo — ยังไม่ได้เชื่อมต่อ Google Sheets</div>}
+      </React.Fragment> : <div style={{animation:'fadeInUp 0.4s'}}>
+        <div style={{fontSize:18,fontWeight:700,color:'white',textAlign:'center',marginBottom:20}}>📋 ขอเข้าใช้บริการ</div>
+        {rs ? <div style={{textAlign:'center',color:'#00b894',fontSize:15,padding:30}}>✅ ส่งคำขอเรียบร้อย!</div> : <React.Fragment>
+          {inp('ชื่อ-นามสกุล',rn,sRn,{ph:'กรอกชื่อ',icon:'📝',mb:14})}
+          {inp('ชื่อผู้ใช้',ru,sRu,{ph:'กรอกชื่อผู้ใช้',icon:'👤',mb:14})}
+          {inp('รหัสผ่าน',rp,sRp,{type:'password',ph:'กรอกรหัสผ่าน',icon:'🔑',mb:14})}
+          <button onClick={doR} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:'linear-gradient(135deg,#00b894,#55efc4)',color:'#1a1a2e',fontSize:15,fontWeight:700,cursor:'pointer',marginBottom:10}}>ส่งคำขอ</button>
+          <button onClick={()=>sSr(false)} style={{width:'100%',padding:10,borderRadius:10,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(255,255,255,0.5)',fontSize:13,cursor:'pointer'}}>← กลับ</button>
+        </React.Fragment>}
+      </div>}
+    </div>
+    <style>{`@keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(20px,-20px)}}@keyframes bobble{0%{transform:translateY(0)}100%{transform:translateY(-6px)}}@keyframes floatUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-30px)}}@keyframes fadeInUp{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}input::placeholder{color:rgba(255,255,255,0.25)}`}</style>
+  </div>;
+};
+
+/* ═══ SIDEBAR ═══ */
+const Sidebar = ({page, setPage, user, onLogout, co, setCo}) => {
+  const items = [{id:'dashboard',icon:'🏠',label:'ภาพรวม',perm:'view_dashboard'},{id:'data',icon:'📝',label:'กรอกข้อมูล',perm:'edit_data'},{id:'reports',icon:'📊',label:'รายงาน',perm:'view_reports'},{id:'content',icon:'📋',label:'คอนเทนต์',perm:'manage_content'},{id:'messages',icon:'💬',label:'ข้อความ',perm:'view_messages'},{id:'ads',icon:'📢',label:'โฆษณา',perm:'manage_ads'},{id:'ai',icon:'🤖',label:'AI วิเคราะห์',perm:'ai_analytics'},{id:'admin',icon:'⚙️',label:'จัดการผู้ใช้',perm:'manage_users'}].filter(i=>user.role==='admin'||user.permissions?.includes(i.perm));
+  return <div style={{width:co?70:240,minHeight:'100vh',background:'linear-gradient(180deg,#1a1a3e,#0c0c1d)',color:'white',display:'flex',flexDirection:'column',transition:'width 0.3s',position:'fixed',left:0,top:0,zIndex:100}}>
+    <div style={{padding:'20px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+      {!co && <span style={{fontWeight:800,fontSize:18}}><span style={{color:'#a29bfe'}}>📊</span> SocialPulse</span>}
+      <button onClick={()=>setCo(!co)} style={{background:'none',border:'none',color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:16}}>{co?'▶':'◀'}</button>
+    </div>
+    <div style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>{items.map(i=><button key={i.id} onClick={()=>setPage(i.id)} style={{width:'100%',padding:co?'12px 0':'10px 14px',borderRadius:10,border:'none',background:page===i.id?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'transparent',color:page===i.id?'white':'rgba(255,255,255,0.55)',fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,textAlign:'left'}} onMouseOver={e=>{if(page!==i.id)e.currentTarget.style.background='rgba(108,92,231,0.15)';}} onMouseOut={e=>{if(page!==i.id)e.currentTarget.style.background='transparent';}}><span style={{fontSize:18,minWidth:co?'100%':24,textAlign:'center'}}>{i.icon}</span>{!co && <span style={{fontWeight:page===i.id?600:400}}>{i.label}</span>}</button>)}</div>
+    <div style={{padding:'12px 16px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+      {!co && <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:'50%',background:'linear-gradient(135deg,#6c5ce7,#a29bfe)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700}}>{user.name?.[0]}</div><div><div style={{fontSize:13,fontWeight:600}}>{user.name}</div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>{user.role}</div></div></div>}
+      <button onClick={onLogout} style={{width:'100%',padding:8,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'rgba(255,255,255,0.5)',fontSize:12,cursor:'pointer'}}>{co?'🚪':'🚪 ออกจากระบบ'}</button>
+    </div>
+  </div>;
+};
+
+/* ═══ PAGE: DASHBOARD — ดูได้ทุก role, กรองรายวัน/เดือน/ปี ═══ */
+const DashPage = ({entries, metrics, viewMode, setViewMode}) => {
+  const agg = useMemo(() => {
+    const result = {};
+    PLATFORMS.forEach(p => { result[p.id] = {}; metrics.forEach(m => { result[p.id][m.id] = 0; }); });
+    const now = new Date();
+    entries.forEach(e => {
+      const d = new Date(e.date);
+      let include = false;
+      if (viewMode === 'day') include = e.date === today();
+      else if (viewMode === 'month') include = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      else if (viewMode === 'year') include = d.getFullYear() === now.getFullYear();
+      else include = true;
+      if (include && result[e.platform]) {
+        metrics.forEach(m => { if (e[m.id] !== undefined) result[e.platform][m.id] += Number(e[m.id]) || 0; });
+      }
+    });
+    return result;
+  }, [entries, metrics, viewMode]);
+
+  const chartData = useMemo(() => {
+    const byDate = {};
+    entries.forEach(e => {
+      if (!byDate[e.date]) byDate[e.date] = {};
+      PLATFORMS.forEach(p => { if (!byDate[e.date][p.id]) byDate[e.date][p.id] = 0; });
+      if (e.platform) byDate[e.date][e.platform] = (byDate[e.date][e.platform]||0) + (Number(e.engagement)||Number(e.reach)||0);
+    });
+    return Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).slice(-14).map(([d,v])=>({name:d.slice(5),...v}));
+  }, [entries]);
+
+  const viewLabels = {day:'วันนี้',month:'เดือนนี้',year:'ปีนี้',all:'ทั้งหมด'};
+
+  return <div style={{padding:'24px 28px',maxWidth:1400}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24,flexWrap:'wrap',gap:12}}>
+      <div><div style={{fontSize:24,fontWeight:800,color:'#1a1a2e'}}>📊 ภาพรวมข้อมูลทั้งหมด</div><div style={{fontSize:13,color:'#636e72',marginTop:4}}>ติดตามผลการดำเนินงานทุกช่องทาง</div></div>
+      <div style={{display:'flex',gap:8}}>{Object.entries(viewLabels).map(([k,v])=><button key={k} onClick={()=>setViewMode(k)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:viewMode===k?'#6c5ce7':'#f0f0f5',color:viewMode===k?'white':'#636e72',fontSize:13,cursor:'pointer',fontWeight:viewMode===k?600:400}}>{v}</button>)}</div>
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16,marginBottom:24}}>
+      {PLATFORMS.map(p => <div key={p.id} style={{...S.card,padding:'20px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}><div style={S.pI(p.color)}>{p.icon}</div><div style={{fontWeight:700,fontSize:16}}>{p.name}</div></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {metrics.slice(0,4).map(m => <div key={m.id} style={{padding:'8px 10px',background:'#f8f7ff',borderRadius:8}}>
+            <div style={{fontSize:10,color:'#b2bec3'}}>{m.icon} {m.name}</div>
+            <div style={{fontSize:18,fontWeight:800,color:'#2d3436'}}>{fN(agg[p.id]?.[m.id] || 0)}</div>
+            <div style={{fontSize:10,color:'#b2bec3'}}>{m.unit}</div>
+          </div>)}
+        </div>
+        {metrics.length > 4 && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>
+          {metrics.slice(4).map(m => <div key={m.id} style={{padding:'6px 10px',background:'#fafafa',borderRadius:6}}>
+            <div style={{fontSize:10,color:'#b2bec3'}}>{m.icon} {m.name}</div>
+            <div style={{fontSize:14,fontWeight:700}}>{fN(agg[p.id]?.[m.id] || 0)}</div>
+          </div>)}
+        </div>}
+      </div>)}
+    </div>
+
+    {chartData.length > 0 && <div style={S.card}>
+      <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>แนวโน้ม 14 วันล่าสุด</div>
+      <ResponsiveContainer width="100%" height={250}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f5"/>
+          <XAxis dataKey="name" tick={{fontSize:11,fill:'#b2bec3'}}/>
+          <YAxis tick={{fontSize:11,fill:'#b2bec3'}} tickFormatter={v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}/>
+          <Tooltip formatter={v=>fN(v)}/>
+          {PLATFORMS.map(p=><Line key={p.id} type="monotone" dataKey={p.id} stroke={p.color} strokeWidth={2} dot={false} name={p.name}/>)}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>}
+  </div>;
+};
+
+/* ═══ PAGE: DATA ENTRY — สร้างตัวชี้วัดใหม่ + กรอกรายวัน/เดือน/ปี ═══ */
+const DataPage = ({entries, setEntries, metrics, setMetrics}) => {
+  const [selPlat, setSelPlat] = useState('facebook');
+  const [selDate, setSelDate] = useState(today());
+  const [values, setValues] = useState({});
+  const [saved, setSaved] = useState(false);
+  const [showNewMetric, setShowNew] = useState(false);
+  const [newMetric, setNewMetric] = useState({name:'',unit:'ครั้ง',icon:'📊'});
+  const [viewTab, setViewTab] = useState('entry');
+  const [histPlat, setHistPlat] = useState('facebook');
+
+  const loadExisting = (plat, date) => {
+    const existing = entries.find(e => e.platform === plat && e.date === date);
+    if (existing) {
+      const v = {};
+      metrics.forEach(m => { v[m.id] = existing[m.id] || ''; });
+      setValues(v);
+    } else {
+      const v = {};
+      metrics.forEach(m => { v[m.id] = ''; });
+      setValues(v);
+    }
+  };
+
+  useEffect(() => { loadExisting(selPlat, selDate); }, [selPlat, selDate, metrics]);
+
+  const saveData = async () => {
+    const entry = { date: selDate, platform: selPlat, ...values };
+    setEntries(prev => {
+      const idx = prev.findIndex(e => e.platform === selPlat && e.date === selDate);
+      if (idx >= 0) { const n = [...prev]; n[idx] = entry; return n; }
+      return [...prev, entry];
+    });
+    if (USE_SHEETS) await api.post({ action:'saveEntry', ...entry });
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
+  };
+
+  const addMetric = () => {
+    if (!newMetric.name) return;
+    const id = 'custom_' + Date.now();
+    setMetrics(prev => [...prev, { id, ...newMetric }]);
+    setNewMetric({name:'',unit:'ครั้ง',icon:'📊'});
+    setShowNew(false);
+  };
+
+  const delMetric = (id) => {
+    if (DEFAULT_METRICS.find(m=>m.id===id)) return;
+    setMetrics(prev => prev.filter(m => m.id !== id));
+  };
+
+  const historyData = useMemo(() => {
+    return entries.filter(e => e.platform === histPlat).sort((a,b) => b.date.localeCompare(a.date));
+  }, [entries, histPlat]);
+
+  return <div style={{padding:'24px 28px',maxWidth:1200}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}>
+      <div><div style={{fontSize:22,fontWeight:800}}>📝 กรอกข้อมูล</div><div style={{fontSize:13,color:'#b2bec3'}}>บันทึกข้อมูลตัวชี้วัดรายวัน และสร้างตัวชี้วัดใหม่</div></div>
+      <div style={{display:'flex',gap:8}}>
+        {['entry','history','metrics'].map(t=><button key={t} onClick={()=>setViewTab(t)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:viewTab===t?'#6c5ce7':'#f0f0f5',color:viewTab===t?'white':'#636e72',fontSize:13,cursor:'pointer',fontWeight:viewTab===t?600:400}}>{{entry:'กรอกข้อมูล',history:'ประวัติ',metrics:'ตัวชี้วัด'}[t]}</button>)}
+      </div>
+    </div>
+
+    {viewTab === 'entry' && <div style={S.card}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
+        <div>
+          <label style={{fontSize:12,color:'#b2bec3',display:'block',marginBottom:4}}>แพลตฟอร์ม</label>
+          <select value={selPlat} onChange={e=>setSelPlat(e.target.value)} style={{...S.input}}>
+            {PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:12,color:'#b2bec3',display:'block',marginBottom:4}}>วันที่</label>
+          <input type="date" value={selDate} onChange={e=>setSelDate(e.target.value)} style={S.input}/>
+        </div>
+      </div>
+      <div style={{fontSize:14,fontWeight:600,color:'#6c5ce7',marginBottom:12}}>ตัวชี้วัด ({metrics.length} รายการ)</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:20}}>
+        {metrics.map(m=><div key={m.id}>
+          <label style={{fontSize:12,color:'#636e72',display:'block',marginBottom:4}}>{m.icon} {m.name} ({m.unit})</label>
+          <input type="number" value={values[m.id]||''} onChange={e=>setValues(prev=>({...prev,[m.id]:e.target.value}))} placeholder="0" style={{...S.input,border:'2px solid #6c5ce7',background:'#f8f7ff'}}/>
+        </div>)}
+      </div>
+      {saved && <div style={{background:'#d4edda',color:'#155724',padding:'12px 20px',borderRadius:10,marginBottom:16,fontWeight:600,animation:'fadeInUp 0.3s'}}>✅ บันทึกข้อมูลวันที่ {selDate} สำเร็จ!</div>}
+      <button onClick={saveData} style={S.btn('linear-gradient(135deg,#6c5ce7,#a29bfe)')}>💾 บันทึกข้อมูล</button>
+    </div>}
+
+    {viewTab === 'history' && <div style={S.card}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:16}}>📜 ประวัติการกรอกข้อมูล</div>
+        <select value={histPlat} onChange={e=>setHistPlat(e.target.value)} style={S.sel}>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      </div>
+      <div style={{overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr><th style={S.th}>วันที่</th>{metrics.map(m=><th key={m.id} style={S.th}>{m.icon} {m.name}</th>)}</tr></thead>
+          <tbody>{historyData.length>0 ? historyData.map((e,i)=><tr key={i}><td style={S.td}>{e.date}</td>{metrics.map(m=><td key={m.id} style={{...S.td,fontWeight:600}}>{fN(Number(e[m.id])||0)}</td>)}</tr>) : <tr><td colSpan={metrics.length+1} style={{...S.td,textAlign:'center',padding:40,color:'#b2bec3'}}>ยังไม่มีข้อมูล — ไปแท็บ "กรอกข้อมูล" เพื่อเริ่มบันทึก</td></tr>}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {viewTab === 'metrics' && <div style={S.card}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div><div style={{fontWeight:700,fontSize:16}}>📐 จัดการตัวชี้วัด</div><div style={{fontSize:12,color:'#b2bec3'}}>สร้างตัวชี้วัดใหม่ เช่น ยอด Engagement, ผู้ติดตาม ฯลฯ</div></div>
+        <button onClick={()=>setShowNew(true)} style={S.btn('#6c5ce7')}>+ สร้างตัวชี้วัดใหม่</button>
+      </div>
+      {showNewMetric && <div style={{background:'#f8f7ff',borderRadius:12,padding:16,marginBottom:16,animation:'fadeInUp 0.3s'}}>
+        <div style={{fontWeight:600,marginBottom:12}}>✨ สร้างตัวชี้วัดใหม่</div>
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}}>
+          <div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>ชื่อตัวชี้วัด</label><input value={newMetric.name} onChange={e=>setNewMetric(p=>({...p,name:e.target.value}))} style={S.input} placeholder="เช่น ยอดขาย, จำนวนสมาชิก..."/></div>
+          <div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>หน่วย</label><input value={newMetric.unit} onChange={e=>setNewMetric(p=>({...p,unit:e.target.value}))} style={S.input} placeholder="ครั้ง, คน, บาท..."/></div>
+          <div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>ไอคอน</label><input value={newMetric.icon} onChange={e=>setNewMetric(p=>({...p,icon:e.target.value}))} style={S.input} placeholder="📊"/></div>
+        </div>
+        <div style={{display:'flex',gap:8}}><button onClick={addMetric} style={S.btn('#00b894')}>✅ เพิ่ม</button><button onClick={()=>setShowNew(false)} style={S.btnO('#636e72')}>ยกเลิก</button></div>
+      </div>}
+      <div style={{display:'grid',gap:8}}>
+        {metrics.map(m => <div key={m.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderRadius:10,border:'1px solid #f0f0f5'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>{m.icon}</span><div><div style={{fontWeight:600,fontSize:14}}>{m.name}</div><div style={{fontSize:11,color:'#b2bec3'}}>หน่วย: {m.unit} · ID: {m.id}</div></div></div>
+          {!DEFAULT_METRICS.find(x=>x.id===m.id) ? <button onClick={()=>delMetric(m.id)} style={S.btnO('#e17055')}>🗑️ ลบ</button> : <span style={S.badge('#f0f0f5','#b2bec3')}>ค่าเริ่มต้น</span>}
+        </div>)}
+      </div>
+    </div>}
+  </div>;
+};
+
+/* ═══ PAGE: REPORTS ═══ */
+const RepPage = ({entries, metrics}) => {
+  const [pf,sPf]=useState('all');const [tab,sTab]=useState('table');
+  const filtered = pf==='all' ? entries : entries.filter(e=>e.platform===pf);
+  const exportCSV = () => {
+    let csv = 'วันที่,แพลตฟอร์ม,' + metrics.map(m=>m.name).join(',') + '\n';
+    filtered.forEach(e => { csv += e.date + ',' + (PF(e.platform).name) + ',' + metrics.map(m=>e[m.id]||0).join(',') + '\n'; });
+    const b = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='SocialPulse_Report.csv';a.click();
+  };
+  const summaryByPlat = useMemo(()=>{
+    const r={};PLATFORMS.forEach(p=>{r[p.id]={};metrics.forEach(m=>{r[p.id][m.id]=0;});});
+    filtered.forEach(e=>{if(r[e.platform])metrics.forEach(m=>{r[e.platform][m.id]+=(Number(e[m.id])||0);});});
+    return r;
+  },[filtered,metrics]);
+
+  return <div style={{padding:'24px 28px',maxWidth:1400}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24,flexWrap:'wrap',gap:12}}>
+      <div><div style={{fontSize:22,fontWeight:800}}>📊 รายงาน</div><div style={{fontSize:13,color:'#b2bec3'}}>สรุปผลดำเนินงาน พร้อม Export</div></div>
+      <div style={{display:'flex',gap:8}}><select value={pf} onChange={e=>sPf(e.target.value)} style={S.sel}><option value="all">ทุกแพลตฟอร์ม</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button onClick={exportCSV} style={S.btn('#6c5ce7')}>📥 Export CSV</button></div>
+    </div>
+    <div style={{display:'flex',gap:8,marginBottom:20}}>{[{id:'table',l:'ตาราง'},{id:'chart',l:'กราฟ'}].map(t=><button key={t.id} onClick={()=>sTab(t.id)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:tab===t.id?'#6c5ce7':'#f0f0f5',color:tab===t.id?'white':'#636e72',fontSize:13,cursor:'pointer',fontWeight:tab===t.id?600:400}}>{t.l}</button>)}</div>
+    {tab==='table' && <div style={{...S.card,padding:0,overflow:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={S.th}>แพลตฟอร์ม</th>{metrics.map(m=><th key={m.id} style={S.th}>{m.icon} {m.name}</th>)}</tr></thead>
+        <tbody>{PLATFORMS.filter(p=>pf==='all'||p.id===pf).map(p=><tr key={p.id}><td style={S.td}><div style={{display:'flex',alignItems:'center',gap:8}}><div style={S.pI(p.color)}>{p.icon}</div>{p.name}</div></td>{metrics.map(m=><td key={m.id} style={{...S.td,fontWeight:600}}>{fN(summaryByPlat[p.id]?.[m.id]||0)}</td>)}</tr>)}</tbody>
+      </table>
+    </div>}
+    {tab==='chart' && <div style={S.card}>
+      <div style={{fontWeight:700,marginBottom:16}}>เปรียบเทียบแพลตฟอร์ม — {metrics[0]?.name || 'ผู้ติดตาม'}</div>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={PLATFORMS.filter(p=>pf==='all'||p.id===pf).map(p=>({name:p.name,value:summaryByPlat[p.id]?.[metrics[0]?.id]||0}))} layout="vertical">
+          <CartesianGrid strokeDasharray="3 3"/><XAxis type="number" tickFormatter={v=>fN(v)}/><YAxis type="category" dataKey="name" width={100} tick={{fontSize:12}}/>
+          <Tooltip formatter={v=>fN(v)}/><Bar dataKey="value" fill="#6c5ce7" radius={[0,4,4,0]}/>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>}
+  </div>;
+};
+
+/* ═══ PAGE: CONTENT ═══ */
+const INIT_CONTENT=[{id:1,title:'5 เทคนิคเพิ่มยอดขาย',platform:'facebook',status:'published',date:'2024-05-28',type:'article',desc:'บทความ'},{id:2,title:'รีวิวสินค้าใหม่',platform:'instagram',status:'published',date:'2024-05-26',type:'reels',desc:'Reels'},{id:3,title:'เบื้องหลังทีมงาน',platform:'tiktok',status:'published',date:'2024-05-25',type:'video',desc:'Video'},{id:4,title:'Flash Sale โปรโมชั่น',platform:'line',status:'scheduled',date:'2024-06-02',type:'broadcast',desc:'Broadcast'},{id:5,title:'Q&A ถามตอบ',platform:'twitter',status:'draft',date:'2024-06-05',type:'thread',desc:'Thread'}];
+const ConPage = () => {
+  const [items,sI]=useState(INIT_CONTENT);const [fl,sFl]=useState('all');const [sf,sSf]=useState('all');const [show,sSh]=useState(false);const [eId,sEId]=useState(null);const [fm,sFm]=useState({title:'',platform:'facebook',status:'draft',type:'article',desc:'',date:today()});
+  const fd=items.filter(c=>(fl==='all'||c.platform===fl)&&(sf==='all'||c.status===sf));
+  const openN=()=>{sEId(null);sFm({title:'',platform:'facebook',status:'draft',type:'article',desc:'',date:today()});sSh(true);};
+  const openE=c=>{sEId(c.id);sFm({title:c.title,platform:c.platform,status:c.status,type:c.type,desc:c.desc,date:c.date});sSh(true);};
+  const save=()=>{if(!fm.title)return;if(eId)sI(pr=>pr.map(c=>c.id===eId?{...c,...fm}:c));else sI(pr=>[{id:Date.now(),...fm},...pr]);sSh(false);};
+  return <div style={{padding:'24px 28px',maxWidth:1400}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}><div><div style={{fontSize:22,fontWeight:800}}>📋 คอนเทนต์</div></div><button onClick={openN} style={S.btn('linear-gradient(135deg,#6c5ce7,#a29bfe)')}>+ สร้างใหม่</button></div>
+    {show && <div style={{...S.card,marginBottom:20,animation:'fadeInUp 0.3s'}}><div style={{fontWeight:700,marginBottom:16}}>{eId?'✏️ แก้ไข':'✨ สร้างใหม่'}</div><div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}}><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>หัวข้อ</label><input value={fm.title} onChange={e=>sFm(p=>({...p,title:e.target.value}))} style={S.input}/></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>แพลตฟอร์ม</label><select value={fm.platform} onChange={e=>sFm(p=>({...p,platform:e.target.value}))} style={S.input}>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>สถานะ</label><select value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))} style={S.input}><option value="draft">ร่าง</option><option value="scheduled">นัดเวลา</option><option value="published">เผยแพร่</option></select></div></div><div style={{display:'flex',gap:8}}><button onClick={save} style={S.btn('#00b894')}>💾 บันทึก</button><button onClick={()=>sSh(false)} style={S.btnO('#636e72')}>ยกเลิก</button></div></div>}
+    <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}><select value={fl} onChange={e=>sFl(e.target.value)} style={S.sel}><option value="all">ทุกแพลตฟอร์ม</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>{['all','published','scheduled','draft'].map(s=><button key={s} onClick={()=>sSf(s)} style={{padding:'6px 14px',borderRadius:8,border:'none',background:sf===s?'#6c5ce7':'#f0f0f5',color:sf===s?'white':'#636e72',fontSize:12,cursor:'pointer'}}>{s==='all'?'ทั้งหมด':s==='published'?'เผยแพร่':s==='scheduled'?'นัดเวลา':'ร่าง'}</button>)}</div>
+    <div style={{...S.card,padding:0,overflow:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['หัวข้อ','ช่องทาง','ประเภท','วันที่','สถานะ','จัดการ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead><tbody>{fd.map(c=>{const p=PF(c.platform);return<tr key={c.id}><td style={S.td}><div style={{fontWeight:600}}>{c.title}</div></td><td style={S.td}><div style={{display:'flex',alignItems:'center',gap:6}}><div style={S.pI(p.color)}>{p.icon}</div>{p.name}</div></td><td style={S.td}>{c.type}</td><td style={S.td}>{c.date}</td><td style={S.td}><SB s={c.status}/></td><td style={S.td}><div style={{display:'flex',gap:4}}><button onClick={()=>openE(c)} style={{...S.btnO('#6c5ce7'),padding:'4px 10px',fontSize:11}}>✏️</button><button onClick={()=>sI(pr=>pr.filter(x=>x.id!==c.id))} style={{...S.btnO('#e17055'),padding:'4px 10px',fontSize:11}}>🗑️</button></div></td></tr>})}</tbody></table>{fd.length===0 && <div style={{textAlign:'center',padding:40,color:'#b2bec3'}}>ไม่พบคอนเทนต์</div>}</div>
+  </div>;
+};
+
+/* ═══ PAGE: MESSAGES ═══ */
+const INIT_MSGS=[{id:1,platform:'facebook',name:'คุณวิชัย',avatar:'ว',msg:'สนใจสินค้าครับ ราคาเท่าไหร่?',time:'10:32',unread:true,msgs:[{from:'user',text:'สนใจสินค้าครับ ราคาเท่าไหร่?',time:'10:32'}]},{id:2,platform:'instagram',name:'น้องแพร',avatar:'แ',msg:'อยากได้สีชมพูค่ะ',time:'09:15',unread:true,msgs:[{from:'user',text:'อยากได้สีชมพูค่ะ มีไหมคะ?',time:'09:15'}]},{id:3,platform:'line',name:'คุณสมหมาย',avatar:'ส',msg:'สั่งซื้อไปแล้วครับ',time:'เมื่อวาน',unread:false,msgs:[{from:'user',text:'สั่งซื้อไปแล้ว ORD-0531',time:'14:20'},{from:'me',text:'ได้รับออเดอร์แล้วครับ จัดส่ง 1-2 วัน',time:'14:35'}]},{id:4,platform:'tiktok',name:'BossGamer99',avatar:'B',msg:'Collab กันไหมครับ',time:'2 วันก่อน',unread:true,msgs:[{from:'user',text:'สนใจ Collab กันไหม มีผู้ติดตาม 50K',time:'11:00'}]}];
+const MsgPage = () => {
+  const [msgs,sM]=useState(INIT_MSGS);const [sel,sS]=useState(null);const [reply,sR]=useState('');const [fl,sFl]=useState('all');
+  const fd=msgs.filter(m=>fl==='all'||m.platform===fl);const sm=msgs.find(m=>m.id===sel);
+  const send=()=>{if(!reply.trim()||!sel)return;sM(pr=>pr.map(m=>m.id===sel?{...m,msgs:[...m.msgs,{from:'me',text:reply,time:new Date().toLocaleTimeString('th',{hour:'2-digit',minute:'2-digit'})}],msg:reply,unread:false}:m));sR('');};
+  return <div style={{padding:'24px 28px',maxWidth:1400}}>
+    <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>💬 ข้อความ</div>
+    <div style={{fontSize:13,color:'#b2bec3',marginBottom:20}}>ข้อความจากทุกช่องทาง {msgs.filter(m=>m.unread).length>0 && <span style={S.badge('#e17055','white')}>{msgs.filter(m=>m.unread).length} ใหม่</span>}</div>
+    <div style={{display:'grid',gridTemplateColumns:'340px 1fr',gap:16,height:'calc(100vh - 200px)',minHeight:400}}>
+      <div style={{...S.card,padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{padding:'10px 12px',borderBottom:'1px solid #f0f0f5',display:'flex',gap:4}}>{['all','facebook','instagram','tiktok','line','twitter'].map(f=><button key={f} onClick={()=>sFl(f)} style={{padding:'4px 8px',borderRadius:6,border:'none',background:fl===f?'#6c5ce7':'#f0f0f5',color:fl===f?'white':'#636e72',fontSize:11,cursor:'pointer'}}>{f==='all'?'ทั้งหมด':PF(f).icon}</button>)}</div>
+        <div style={{flex:1,overflowY:'auto'}}>{fd.map(m=>{const p=PF(m.platform);return <div key={m.id} onClick={()=>{sS(m.id);sM(pr=>pr.map(x=>x.id===m.id?{...x,unread:false}:x));}} style={{padding:'12px 14px',borderBottom:'1px solid #f5f5f8',cursor:'pointer',background:sel===m.id?'#f8f7ff':m.unread?'#fffbf0':'white',display:'flex',gap:10}}>
+          <div style={{width:40,height:40,borderRadius:'50%',background:p.color+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:p.color,flexShrink:0}}>{m.avatar}</div>
+          <div style={{flex:1,minWidth:0}}><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:m.unread?700:500,fontSize:14}}>{m.name}</span><span style={{fontSize:11,color:'#b2bec3'}}>{m.time}</span></div><div style={{fontSize:12,color:'#636e72',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.msg}</div></div>
+          {m.unread && <div style={{width:8,height:8,borderRadius:'50%',background:'#6c5ce7',flexShrink:0,marginTop:6}}/>}
+        </div>})}</div>
+      </div>
+      <div style={{...S.card,padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {sm ? <React.Fragment>
+          <div style={{padding:'12px 16px',borderBottom:'1px solid #f0f0f5',display:'flex',alignItems:'center',gap:10}}><div style={{width:36,height:36,borderRadius:'50%',background:PF(sm.platform).color+'20',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:PF(sm.platform).color}}>{sm.avatar}</div><div><div style={{fontWeight:600}}>{sm.name}</div><div style={{fontSize:11,color:'#b2bec3'}}>{PF(sm.platform).name}</div></div></div>
+          <div style={{flex:1,overflowY:'auto',padding:16,display:'flex',flexDirection:'column',gap:8}}>{sm.msgs.map((m,i)=><div key={i} style={{display:'flex',justifyContent:m.from==='me'?'flex-end':'flex-start'}}><div style={{maxWidth:'70%',padding:'10px 14px',borderRadius:m.from==='me'?'14px 14px 4px 14px':'14px 14px 14px 4px',background:m.from==='me'?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'#f0f0f5',color:m.from==='me'?'white':'#2d3436',fontSize:13}}>{m.text}<div style={{fontSize:10,marginTop:4,opacity:0.6,textAlign:'right'}}>{m.time}</div></div></div>)}</div>
+          <div style={{padding:'12px 16px',borderTop:'1px solid #f0f0f5',display:'flex',gap:8}}><input value={reply} onChange={e=>sR(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')send();}} placeholder="พิมพ์ข้อความ..." style={{...S.input,flex:1}}/><button onClick={send} style={S.btn('#6c5ce7')}>ส่ง</button></div>
+        </React.Fragment> : <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#b2bec3'}}><div style={{textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>💬</div>เลือกข้อความเพื่อเริ่มสนทนา</div></div>}
+      </div>
+    </div>
+  </div>;
+};
+
+/* ═══ PAGE: ADS ═══ */
+const INIT_CAMPS=[{id:1,name:'Summer Sale',platform:'facebook',status:'active',budget:15000,spent:8750,clicks:3200,conversions:89},{id:2,name:'Brand Awareness',platform:'instagram',status:'active',budget:20000,spent:12300,clicks:5600,conversions:120},{id:3,name:'TikTok Viral',platform:'tiktok',status:'paused',budget:10000,spent:6800,clicks:12000,conversions:200}];
+const AdsPage = () => {
+  const [camps,sC]=useState(INIT_CAMPS);const [show,sSh]=useState(false);const [eId,sEId]=useState(null);const [fm,sFm]=useState({name:'',platform:'facebook',budget:5000});
+  const openN=()=>{sEId(null);sFm({name:'',platform:'facebook',budget:5000});sSh(true);};
+  const openE=c=>{sEId(c.id);sFm({name:c.name,platform:c.platform,budget:c.budget});sSh(true);};
+  const save=()=>{if(!fm.name)return;if(eId)sC(pr=>pr.map(c=>c.id===eId?{...c,...fm}:c));else sC(pr=>[{id:Date.now(),status:'active',spent:0,clicks:0,conversions:0,...fm},...pr]);sSh(false);};
+  return <div style={{padding:'24px 28px',maxWidth:1400}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}><div><div style={{fontSize:22,fontWeight:800}}>📢 โฆษณา</div></div><button onClick={openN} style={S.btn('linear-gradient(135deg,#6c5ce7,#a29bfe)')}>+ สร้างแคมเปญ</button></div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,marginBottom:20}}>{[{l:'งบรวม',v:'฿'+fN(camps.reduce((s,c)=>s+c.budget,0)),i:'💰',c:'#6c5ce7'},{l:'ใช้ไป',v:'฿'+fN(camps.reduce((s,c)=>s+c.spent,0)),i:'📊',c:'#e84393'},{l:'Conversions',v:fN(camps.reduce((s,c)=>s+c.conversions,0)),i:'🎯',c:'#00b894'}].map((s,i)=><div key={i} style={{...S.card,padding:'16px 20px',display:'flex',alignItems:'center',gap:12}}><div style={{width:40,height:40,borderRadius:10,background:s.c+'15',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{s.i}</div><div><div style={{fontSize:11,color:'#b2bec3'}}>{s.l}</div><div style={{fontSize:20,fontWeight:800}}>{s.v}</div></div></div>)}</div>
+    {show && <div style={{...S.card,marginBottom:20,animation:'fadeInUp 0.3s'}}><div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}}><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>ชื่อแคมเปญ</label><input value={fm.name} onChange={e=>sFm(p=>({...p,name:e.target.value}))} style={S.input}/></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>แพลตฟอร์ม</label><select value={fm.platform} onChange={e=>sFm(p=>({...p,platform:e.target.value}))} style={S.input}>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>งบ (฿)</label><input type="number" value={fm.budget} onChange={e=>sFm(p=>({...p,budget:+e.target.value}))} style={S.input}/></div></div><div style={{display:'flex',gap:8}}><button onClick={save} style={S.btn('#00b894')}>💾 บันทึก</button><button onClick={()=>sSh(false)} style={S.btnO('#636e72')}>ยกเลิก</button></div></div>}
+    <div style={{...S.card,padding:0,overflow:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['แคมเปญ','ช่อง','สถานะ','งบ','ใช้ไป','คลิก','Conv.','จัดการ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead><tbody>{camps.map(c=>{const p=PF(c.platform);const pct=c.budget?Math.round(c.spent/c.budget*100):0;return<tr key={c.id}><td style={{...S.td,fontWeight:600}}>{c.name}</td><td style={S.td}><div style={S.pI(p.color)}>{p.icon}</div></td><td style={S.td}><SB s={c.status}/></td><td style={S.td}>฿{fN(c.budget)}</td><td style={S.td}><div>฿{fN(c.spent)}</div><div style={{width:'100%',height:4,background:'#f0f0f5',borderRadius:2,marginTop:4}}><div style={{width:pct+'%',height:'100%',background:pct>80?'#e17055':'#00b894',borderRadius:2}}/></div></td><td style={{...S.td,fontWeight:600}}>{fN(c.clicks)}</td><td style={{...S.td,color:'#00b894',fontWeight:600}}>{c.conversions}</td><td style={S.td}><div style={{display:'flex',gap:4}}><button onClick={()=>sC(pr=>pr.map(x=>x.id===c.id?{...x,status:x.status==='active'?'paused':'active'}:x))} style={{...S.btnO(c.status==='active'?'#fdcb6e':'#00b894'),padding:'4px 8px',fontSize:11}}>{c.status==='active'?'⏸':'▶'}</button><button onClick={()=>openE(c)} style={{...S.btnO('#6c5ce7'),padding:'4px 8px',fontSize:11}}>✏️</button><button onClick={()=>sC(pr=>pr.filter(x=>x.id!==c.id))} style={{...S.btnO('#e17055'),padding:'4px 8px',fontSize:11}}>🗑️</button></div></td></tr>})}</tbody></table></div>
+  </div>;
+};
+
+/* ═══ PAGE: AI ANALYTICS ═══ */
+const AIPage = ({entries, metrics}) => {
+  const [ld,sLd]=useState(true);useEffect(()=>{setTimeout(()=>sLd(false),1200);},[]);
+  const sd=[{name:'เชิงบวก',value:68,color:'#00b894'},{name:'เป็นกลาง',value:22,color:'#fdcb6e'},{name:'เชิงลบ',value:10,color:'#e17055'}];
+  const rd=[{subject:'เข้าถึง',A:85,B:70},{subject:'ส่วนร่วม',A:78,B:65},{subject:'เติบโต',A:90,B:55},{subject:'คอนเทนต์',A:72,B:80},{subject:'Sentiment',A:88,B:60},{subject:'ROI',A:65,B:75}];
+  const ins=[{icon:'🔥',title:'TikTok เติบโตเร็วสุด',desc:'ควรเพิ่มงบและทรัพยากร',p:'สูง',c:'#e17055'},{icon:'📈',title:'Engagement IG ดีขึ้น',desc:'Reels มี Engagement สูงกว่า 3.5 เท่า',p:'สูง',c:'#E4405F'},{icon:'⏰',title:'ช่วงทอง: 18-21 น.',desc:'โพสต์ช่วงนี้เข้าถึงสูง 45%',p:'กลาง',c:'#fdcb6e'},{icon:'💬',title:'LINE Broadcast ตอบรับดี',desc:'เปิดอ่าน 78% สูงกว่าค่าเฉลี่ย',p:'กลาง',c:'#06C755'},{icon:'🎯',title:'วิดีโอได้ผลดีสุด',desc:'Eng Rate 14.08% สูงกว่า Static 4x',p:'สูง',c:'#6c5ce7'}];
+  if(ld)return<div style={{padding:'24px 28px',display:'flex',alignItems:'center',justifyContent:'center',minHeight:400}}><div style={{textAlign:'center'}}><div style={{width:50,height:50,border:'4px solid #f0f0f5',borderTopColor:'#6c5ce7',borderRadius:'50%',animation:'spin 1s linear infinite',margin:'0 auto 16px'}}/><div style={{color:'#636e72'}}>🤖 AI กำลังวิเคราะห์...</div></div><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
+  return <div style={{padding:'24px 28px',maxWidth:1400}}>
+    <div style={{fontSize:22,fontWeight:800,marginBottom:20}}>🤖 AI วิเคราะห์</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(350px,1fr))',gap:16,marginBottom:24}}>{ins.map((i,j)=><div key={j} style={{...S.card,padding:16,borderLeft:'4px solid '+i.c,display:'flex',gap:12}}><div style={{fontSize:28}}>{i.icon}</div><div style={{flex:1}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}><div style={{fontWeight:700,fontSize:14}}>{i.title}</div><span style={S.badge(i.p==='สูง'?'#ffeef0':'#fff8e1',i.p==='สูง'?'#e17055':'#f39c12')}>{i.p}</span></div><div style={{fontSize:12,color:'#636e72'}}>{i.desc}</div></div></div>)}</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      <div style={S.card}><div style={{fontWeight:700,marginBottom:16}}>Sentiment</div><div style={{position:'relative',width:160,height:160,margin:'0 auto'}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={sd} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3}>{sd.map((d,i)=><Cell key={i} fill={d.color}/>)}</Pie></PieChart></ResponsiveContainer><div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center'}}><div style={{fontSize:20,fontWeight:800,color:'#00b894'}}>68%</div><div style={{fontSize:10,color:'#b2bec3'}}>เชิงบวก</div></div></div></div>
+      <div style={S.card}><div style={{fontWeight:700,marginBottom:16}}>ประสิทธิภาพ</div><ResponsiveContainer width="100%" height={220}><RadarChart data={rd}><PolarGrid/><PolarAngleAxis dataKey="subject" tick={{fontSize:10}}/><PolarRadiusAxis angle={30} domain={[0,100]} tick={{fontSize:9}}/><Radar name="เดือนนี้" dataKey="A" stroke="#6c5ce7" fill="#6c5ce7" fillOpacity={0.3}/><Radar name="เดือนก่อน" dataKey="B" stroke="#b2bec3" fill="#b2bec3" fillOpacity={0.1}/></RadarChart></ResponsiveContainer></div>
+    </div>
+  </div>;
+};
+
+/* ═══ PAGE: ADMIN — จัดการผู้ใช้ + สิทธิ์ ═══ */
+const AdminPage = ({users, setUsers, pr, setPr}) => {
+  const [eu,sEu]=useState(null);const [ep,sEp]=useState([]);const [er,sEr]=useState('');
+  const app=r=>{setUsers(p=>[...p,{...r,id:Date.now(),role:'viewer',approved:true,permissions:['view_dashboard']}]);setPr(p=>p.filter(x=>x.username!==r.username));};
+  const rej=r=>setPr(p=>p.filter(x=>x.username!==r.username));
+  const stE=u=>{sEu(u.id);sEp([...(u.permissions||[])]);sEr(u.role);};
+  const svP=uid=>{setUsers(p=>p.map(u=>u.id===uid?{...u,permissions:ep,role:er}:u));sEu(null);};
+  const tP=pid=>sEp(p=>p.includes(pid)?p.filter(x=>x!==pid):[...p,pid]);
+  return <div style={{padding:'24px 28px',maxWidth:1200}}>
+    <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>⚙️ จัดการผู้ใช้และสิทธิ์</div>
+    <div style={{fontSize:13,color:'#b2bec3',marginBottom:20}}>กำหนดว่า username ไหนเข้าถึงฟังก์ชันไหนได้บ้าง</div>
+    {pr.length>0 && <div style={{background:'#fff3cd',borderRadius:14,padding:20,marginBottom:20,border:'1px solid #ffc107'}}><div style={{fontWeight:700,color:'#856404',marginBottom:12}}>📋 คำขอรออนุมัติ ({pr.length})</div>{pr.map((r,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:i<pr.length-1?'1px solid rgba(0,0,0,0.08)':'none'}}><div><div style={{fontWeight:600}}>{r.name}</div><div style={{fontSize:12,color:'#856404'}}>@{r.username}</div></div><div style={{display:'flex',gap:8}}><button onClick={()=>app(r)} style={S.btn('#00b894')}>✅ อนุมัติ</button><button onClick={()=>rej(r)} style={S.btn('#e17055')}>❌ ปฏิเสธ</button></div></div>)}</div>}
+    <div style={{...S.card,padding:0}}>
+      <div style={{padding:'16px 24px',borderBottom:'1px solid #f0f0f5',fontWeight:700}}>👥 ผู้ใช้ ({users.length})</div>
+      {users.map(u=><div key={u.id} style={{padding:'16px 24px',borderBottom:'1px solid #f0f0f5'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:eu===u.id?16:0,flexWrap:'wrap',gap:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{width:40,height:40,borderRadius:'50%',background:u.role==='admin'?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'#dfe6e9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:u.role==='admin'?'white':'#636e72'}}>{u.name?.[0]}</div>
+            <div><div style={{fontWeight:600}}>{u.name}</div><div style={{fontSize:12,color:'#b2bec3'}}>@{u.username} · {u.role}</div></div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            {eu===u.id ? <React.Fragment>
+              <select value={er} onChange={e=>sEr(e.target.value)} style={S.sel}><option value="admin">Admin</option><option value="editor">Editor</option><option value="viewer">Viewer</option></select>
+              <button onClick={()=>svP(u.id)} style={S.btn('#00b894')}>💾 บันทึก</button>
+              <button onClick={()=>sEu(null)} style={S.btnO('#636e72')}>ยกเลิก</button>
+            </React.Fragment> : <React.Fragment>
+              <button onClick={()=>stE(u)} style={S.btnO('#6c5ce7')}>✏️ แก้ไขสิทธิ์</button>
+              {u.id!==1 && <button onClick={()=>setUsers(p=>p.filter(x=>x.id!==u.id))} style={S.btnO('#e17055')}>🗑️</button>}
+            </React.Fragment>}
+          </div>
+        </div>
+        {eu===u.id && <div style={{background:'#f8f7ff',borderRadius:10,padding:16,animation:'fadeInUp 0.3s'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'#6c5ce7',marginBottom:10}}>กำหนดสิทธิ์การเข้าถึง:</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:8}}>
+            {PERMS.map(perm=><label key={perm.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',borderRadius:8,background:ep.includes(perm.id)?'rgba(108,92,231,0.08)':'transparent'}}>
+              <input type="checkbox" checked={ep.includes(perm.id)} onChange={()=>tP(perm.id)} style={{width:18,height:18,accentColor:'#6c5ce7'}}/>
+              <span style={{color:ep.includes(perm.id)?'#6c5ce7':'#636e72',fontWeight:ep.includes(perm.id)?600:400}}>{perm.label}</span>
+            </label>)}
+          </div>
+        </div>}
+        {eu!==u.id && u.permissions && <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>{u.permissions.map(pid=>{const p=PERMS.find(x=>x.id===pid);return p ? <span key={pid} style={S.badge('#f0f0f5','#636e72')}>{p.label}</span> : null;})}</div>}
+      </div>)}
+    </div>
+  </div>;
+};
+
+/* ═══ MAIN APP ═══ */
+function App() {
+  const [cu, sCu] = useState(null);
+  const [users, sU] = useState(INIT_USERS);
+  const [page, sP] = useState('dashboard');
+  const [co, sCo] = useState(false);
+  const [pr, sPr] = useState([]);
+  const [metrics, setMetrics] = useState(DEFAULT_METRICS);
+  const [entries, setEntries] = useState(() => genDemoData(DEFAULT_METRICS));
+  const [viewMode, setViewMode] = useState('all');
+
+  if (!cu) return <LoginPage users={users} onLogin={u=>{sCu(u);sP('dashboard');}} onReq={r=>sPr(p=>[...p,r])}/>;
+
+  const sw = co ? 70 : 240;
+  return <div style={{fontFamily:"'Prompt','Noto Sans Thai',sans-serif",minHeight:'100vh',background:'#f5f6fa'}}>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <Sidebar page={page} setPage={sP} user={cu} onLogout={()=>sCu(null)} co={co} setCo={sCo}/>
+    <div style={{marginLeft:sw,transition:'margin-left 0.3s',minHeight:'100vh'}}>
+      <div style={{background:'white',padding:'12px 28px',borderBottom:'1px solid #f0f0f5',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,zIndex:50}}>
+        <div style={{fontSize:13,color:'#b2bec3'}}>{USE_SHEETS ? '🟢 เชื่อมต่อ Google Sheets' : '🟡 โหมด Demo'}</div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <div style={{position:'relative',cursor:'pointer'}} onClick={()=>{if(pr.length>0&&cu.role==='admin')sP('admin');}}>🔔{pr.length>0 && <span style={{position:'absolute',top:-6,right:-6,width:16,height:16,borderRadius:'50%',background:'#e17055',color:'white',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{pr.length}</span>}</div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,#6c5ce7,#a29bfe)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:14,fontWeight:700}}>{cu.name?.[0]}</div><div><div style={{fontSize:13,fontWeight:600}}>{cu.name}</div><div style={{fontSize:10,color:'#b2bec3'}}>{cu.role}</div></div></div>
+        </div>
+      </div>
+
+      {page==='dashboard' && <DashPage entries={entries} metrics={metrics} viewMode={viewMode} setViewMode={setViewMode}/>}
+      {page==='data' && <DataPage entries={entries} setEntries={setEntries} metrics={metrics} setMetrics={setMetrics}/>}
+      {page==='reports' && <RepPage entries={entries} metrics={metrics}/>}
+      {page==='content' && <ConPage/>}
+      {page==='messages' && <MsgPage/>}
+      {page==='ads' && <AdsPage/>}
+      {page==='ai' && <AIPage entries={entries} metrics={metrics}/>}
+      {page==='admin' && (cu.role==='admin' ? <AdminPage users={users} setUsers={sU} pr={pr} setPr={sPr}/> : <div style={{padding:60,textAlign:'center',color:'#b2bec3'}}>🔒 ไม่มีสิทธิ์เข้าถึง</div>)}
+    </div>
+    <style>{`@keyframes fadeInUp{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  </div>;
+}
+
+// Error boundary
+class ErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(error){return{hasError:true,error};}
+  render(){
+    if(this.state.hasError) return React.createElement('div',{style:{padding:60,textAlign:'center',fontFamily:"'Prompt',sans-serif"}},
+      React.createElement('div',{style:{fontSize:48,marginBottom:16}},'⚠️'),
+      React.createElement('div',{style:{fontSize:18,fontWeight:700,marginBottom:8}},'เกิดข้อผิดพลาด'),
+      React.createElement('div',{style:{fontSize:14,color:'#636e72',marginBottom:16}},String(this.state.error?.message||'')),
+      React.createElement('button',{onClick:function(){location.reload();},style:{padding:'12px 32px',borderRadius:10,border:'none',background:'#6c5ce7',color:'white',fontSize:14,cursor:'pointer'}},'🔄 โหลดใหม่')
+    );
+    return this.props.children;
+  }
+}
+ReactDOM.render(React.createElement(ErrorBoundary,null,React.createElement(App)),document.getElementById('root'));
+</script>
+</body>
+</html>
