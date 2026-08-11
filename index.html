@@ -24,17 +24,22 @@ body{font-family:'Prompt','Noto Sans Thai',sans-serif;background:#f5f6fa;overflo
 <script>
 var st=document.getElementById('st');
 var libs=[
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',n:'React'},
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',n:'ReactDOM'},
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js',n:'Babel'},
-  {s:'https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.min.js',n:'Recharts'}
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',n:'React',g:'React'},
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',n:'ReactDOM',g:'ReactDOM'},
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js',n:'PropTypes',g:'PropTypes'},
+  {s:'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js',n:'Babel',g:'Babel'},
+  {s:'https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js',n:'Recharts',g:'Recharts'}
 ];
 function showErr(m){document.getElementById('splash').style.display='none';document.getElementById('err').style.display='flex';document.getElementById('errm').textContent=m;}
 function loadLib(i){
   if(i>=libs.length){st.textContent='เริ่มต้นแอป...';setTimeout(initApp,100);return;}
   st.textContent='โหลด '+libs[i].n+'... ('+(i+1)+'/'+libs.length+')';
   var s=document.createElement('script');s.src=libs[i].s;
-  s.onload=function(){loadLib(i+1);};
+  s.crossOrigin='anonymous';
+  s.onload=function(){
+    if(libs[i].g && !window[libs[i].g]){showErr(libs[i].n+' โหลดแล้วแต่ไม่พร้อมใช้งาน — ลอง refresh');return;}
+    loadLib(i+1);
+  };
   s.onerror=function(){showErr('โหลด '+libs[i].n+' ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต');};
   document.head.appendChild(s);
 }
