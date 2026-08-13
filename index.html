@@ -14,16 +14,15 @@ body{font-family:'Prompt','Noto Sans Thai',sans-serif;background:#f5f6fa;overflo
 #splash.done{opacity:0;pointer-events:none}
 .spin{width:50px;height:50px;border:4px solid rgba(255,255,255,0.1);border-top-color:#a29bfe;border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-#err{display:none;position:fixed;inset:0;background:#1a1a2e;color:white;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9999;text-align:center;padding:40px}
+#err{display:none;position:fixed;inset:0;background:#1a1a2e;color:white;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9999;text-align:center;padding:40px;font-family:'Prompt',sans-serif}
 </style>
 </head>
 <body>
 <div id="splash"><div class="spin"></div><div style="color:rgba(255,255,255,0.6);margin-top:20px;font-size:14px;font-family:'Prompt',sans-serif">กำลังโหลด SocialPulse...</div><div style="color:rgba(255,255,255,0.3);margin-top:8px;font-size:11px;font-family:'Prompt',sans-serif" id="st">โหลดไลบรารี...</div></div>
-<div id="err"><div style="font-size:48px">⚠️</div><div style="font-size:20px;font-weight:700" id="errt">ไม่สามารถโหลดได้</div><div id="errm" style="font-size:14px;color:rgba(255,255,255,0.6)"></div><button onclick="location.reload()" style="padding:12px 32px;border-radius:10px;border:none;background:#6c5ce7;color:white;font-size:14px;cursor:pointer;font-family:'Prompt',sans-serif;margin-top:8px">🔄 ลองใหม่</button></div>
+<div id="err"><div style="font-size:48px">⚠️</div><div style="font-size:20px;font-weight:700">ไม่สามารถโหลดได้</div><div id="errm" style="font-size:14px;color:rgba(255,255,255,0.6)"></div><button onclick="location.reload()" style="padding:12px 32px;border-radius:10px;border:none;background:#6c5ce7;color:white;font-size:14px;cursor:pointer;font-family:'Prompt',sans-serif;margin-top:8px">🔄 ลองใหม่</button></div>
 <div id="root"></div>
 <script>
 var st=document.getElementById('st');
-// Each library has multiple CDN URLs to try (fallback system)
 var libs=[
   {n:'React',g:'React',urls:[
     'https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js',
@@ -53,34 +52,23 @@ var libs=[
   ]}
 ];
 function showErr(m){document.getElementById('splash').style.display='none';document.getElementById('err').style.display='flex';document.getElementById('errm').textContent=m;}
-function tryLoad(libIdx, urlIdx){
+function tryLoad(libIdx,urlIdx){
   var lib=libs[libIdx];
-  if(urlIdx>=lib.urls.length){
-    showErr('โหลด '+lib.n+' ไม่สำเร็จจากทุก CDN — ตรวจสอบอินเทอร์เน็ต');
-    return;
-  }
+  if(urlIdx>=lib.urls.length){showErr('โหลด '+lib.n+' ไม่สำเร็จจากทุก CDN');return;}
   var url=lib.urls[urlIdx];
-  var cdnName=url.indexOf('jsdelivr')>=0?'jsdelivr':url.indexOf('unpkg')>=0?'unpkg':'cdnjs';
-  st.textContent='โหลด '+lib.n+' จาก '+cdnName+'... ('+(libIdx+1)+'/'+libs.length+')';
-  var s=document.createElement('script');
-  s.src=url;
+  var cdn=url.indexOf('jsdelivr')>=0?'jsdelivr':url.indexOf('unpkg')>=0?'unpkg':'cdnjs';
+  st.textContent='โหลด '+lib.n+' จาก '+cdn+'... ('+(libIdx+1)+'/'+libs.length+')';
+  var s=document.createElement('script');s.src=url;
   s.onload=function(){
-    if(lib.g && !window[lib.g]){
-      console.warn(lib.n+' loaded from '+cdnName+' but global not defined, trying next...');
-      tryLoad(libIdx, urlIdx+1);
-      return;
-    }
+    if(lib.g && !window[lib.g]){console.warn(lib.n+' from '+cdn+' failed, trying next');tryLoad(libIdx,urlIdx+1);return;}
     loadLib(libIdx+1);
   };
-  s.onerror=function(){
-    console.warn(lib.n+' failed from '+cdnName+', trying next...');
-    tryLoad(libIdx, urlIdx+1);
-  };
+  s.onerror=function(){console.warn(lib.n+' 404 from '+cdn);tryLoad(libIdx,urlIdx+1);};
   document.head.appendChild(s);
 }
 function loadLib(i){
   if(i>=libs.length){st.textContent='เริ่มต้นแอป...';setTimeout(initApp,100);return;}
-  tryLoad(i, 0);
+  tryLoad(i,0);
 }
 loadLib(0);
 function initApp(){
@@ -96,122 +84,309 @@ function initApp(){
 const {useState, useEffect, useRef, useCallback, useMemo} = React;
 const {LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, AreaChart, Area, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis} = Recharts;
 
-/*
-╔══════════════════════════════════════════════════════════════╗
-║  📌 ตั้งค่า Google Apps Script URL ตรงนี้                    ║
-║  วาง URL ที่ได้จาก Deploy > Web app ลงในช่องด้านล่าง          ║
-╚══════════════════════════════════════════════════════════════╝
-*/
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   📌 CONFIGURATION — ตั้งค่า 2 อย่างตรงนี้
+   ═══════════════════════════════════════════════════════════════════ */
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxnNG4mr7hVsHUcLpBgdYtK_2-D71S-YKXg5ANujqpPeifaP3NHFP4jDCph87HP1YEJYw/exec';
-// ตัวอย่าง: const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx.../exec';
+const GEMINI_API_KEY = 'AQ.Ab8RN6LAzFQ8ucLu1rZu0eZFhZ4__ZFc5BBd7Jbh-2nhF3tTIA';
+/* ═══════════════════════════════════════════════════════════════════ */
 
 const USE_SHEETS = GOOGLE_SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbxnNG4mr7hVsHUcLpBgdYtK_2-D71S-YKXg5ANujqpPeifaP3NHFP4jDCph87HP1YEJYw/exec';
+const USE_GEMINI = GEMINI_API_KEY !== 'AQ.Ab8RN6LAzFQ8ucLu1rZu0eZFhZ4__ZFc5BBd7Jbh-2nhF3tTIA';
 
-/* ═══ API ═══ */
+/* ═══ API HELPERS ═══ */
 const api = {
-  async post(data) {
-    if (!USE_SHEETS) return null;
-    try {
-      const r = await fetch(GOOGLE_SCRIPT_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(data) });
-      return await r.json();
-    } catch(e) { console.error('API error:', e); return null; }
-  },
-  async get(action, params={}) {
+  async get(action, params = {}) {
     if (!USE_SHEETS) return null;
     try {
       const url = new URL(GOOGLE_SCRIPT_URL);
       url.searchParams.set('action', action);
-      Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
+      Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
       const r = await fetch(url.toString());
       return await r.json();
-    } catch(e) { console.error('API error:', e); return null; }
+    } catch(e) { console.error('API get error:', e); return null; }
+  },
+  async post(data) {
+    if (!USE_SHEETS) return { success: true, offline: true };
+    try {
+      const r = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: JSON.stringify(data)
+      });
+      return await r.json();
+    } catch(e) { console.error('API post error:', e); return { success: false, error: e.message }; }
   }
 };
 
-/* ═══ PLATFORMS ═══ */
-const PLATFORMS = [
-  {id:'facebook',name:'Facebook',color:'#1877F2',icon:'f'},
-  {id:'instagram',name:'Instagram',color:'#E4405F',icon:'📷'},
-  {id:'twitter',name:'X (Twitter)',color:'#1DA1F2',icon:'𝕏'},
-  {id:'tiktok',name:'TikTok',color:'#010101',icon:'♪'},
-  {id:'line',name:'LINE Official',color:'#06C755',icon:'💬'},
-];
-const PERMS = [
-  {id:'view_dashboard',label:'ดูแดชบอร์ด'},
-  {id:'edit_data',label:'กรอกข้อมูล'},
-  {id:'view_reports',label:'ดูรายงาน'},
-  {id:'manage_content',label:'จัดการคอนเทนต์'},
-  {id:'view_messages',label:'ดูข้อความ'},
-  {id:'manage_ads',label:'จัดการโฆษณา'},
-  {id:'ai_analytics',label:'AI วิเคราะห์'},
-  {id:'manage_users',label:'จัดการผู้ใช้'},
-];
-const INIT_USERS = [
-  {id:1,username:'admin',password:'admin123',name:'Admin',role:'admin',approved:true,permissions:PERMS.map(p=>p.id)},
-  {id:2,username:'viewer1',password:'1234',name:'ผู้ดูรายงาน',role:'viewer',approved:true,permissions:['view_dashboard','view_reports']},
-];
-
-/* ═══ DEFAULT METRICS ═══ */
-const DEFAULT_METRICS = [
-  {id:'followers',name:'ผู้ติดตาม',unit:'คน',icon:'👥'},
-  {id:'reach',name:'การเข้าถึง',unit:'ครั้ง',icon:'📈'},
-  {id:'engagement',name:'การมีส่วนร่วม',unit:'ครั้ง',icon:'🤝'},
-  {id:'clicks',name:'คลิกลิงก์',unit:'ครั้ง',icon:'👆'},
-  {id:'shares',name:'แชร์',unit:'ครั้ง',icon:'🔄'},
-  {id:'comments',name:'คอมเมนต์',unit:'ครั้ง',icon:'💬'},
-  {id:'impressions',name:'Impressions',unit:'ครั้ง',icon:'👁️'},
-  {id:'video_views',name:'ยอดวิว',unit:'ครั้ง',icon:'▶️'},
-];
-
-/* ═══ DEMO DATA ═══ */
-function genDemoData(metrics) {
-  const data = [];
-  const now = new Date();
-  for (let d = 30; d >= 0; d--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - d);
-    const dateStr = date.toISOString().split('T')[0];
-    PLATFORMS.forEach(p => {
-      const entry = { date: dateStr, platform: p.id };
-      metrics.forEach(m => {
-        const base = m.id === 'followers' ? 50000 + Math.random()*100000 :
-                     m.id === 'reach' ? 10000 + Math.random()*50000 :
-                     m.id === 'engagement' ? 1000 + Math.random()*10000 :
-                     500 + Math.random()*5000;
-        entry[m.id] = Math.round(base * (1 + (30-d)*0.01));
-      });
-      data.push(entry);
-    });
+async function askGemini(prompt, context = '') {
+  if (!USE_GEMINI) {
+    return 'โปรดตั้งค่า GEMINI_API_KEY ในโค้ดก่อนใช้งาน AI\n\nวิธีทำ:\n1. เข้า https://aistudio.google.com/app/apikey\n2. Create API Key\n3. Copy Key ใส่ในตัวแปร GEMINI_API_KEY';
   }
-  return data;
+  try {
+    const fullPrompt = context ? `${context}\n\nคำถาม: ${prompt}` : prompt;
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+        })
+      }
+    );
+    const data = await r.json();
+    if (data.error) return 'ข้อผิดพลาด: ' + data.error.message;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'ไม่มีคำตอบ';
+  } catch(e) { return 'ข้อผิดพลาด: ' + e.message; }
 }
 
-/* ═══ STYLES ═══ */
-const S = {
-  card: {background:'white',borderRadius:16,padding:20,boxShadow:'0 2px 12px rgba(0,0,0,0.04)',border:'1px solid #f0f0f5'},
-  btn: (bg,c) => ({padding:'8px 18px',borderRadius:8,border:'none',background:bg,color:c||'white',fontSize:13,cursor:'pointer',fontWeight:600}),
-  btnO: c => ({padding:'8px 18px',borderRadius:8,border:'1px solid '+c,background:'transparent',color:c,fontSize:13,cursor:'pointer',fontWeight:600}),
-  badge: (bg,c) => ({padding:'3px 10px',borderRadius:20,background:bg,fontSize:11,color:c,fontWeight:600,display:'inline-block'}),
-  input: {width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #dfe6e9',fontSize:14,outline:'none',boxSizing:'border-box'},
-  sel: {padding:'8px 12px',borderRadius:8,border:'1px solid #dfe6e9',fontSize:13,outline:'none',background:'white'},
-  th: {padding:'10px 14px',textAlign:'left',fontSize:12,color:'#b2bec3',fontWeight:600,borderBottom:'2px solid #f0f0f5'},
-  td: {padding:'10px 14px',fontSize:13,borderBottom:'1px solid #f5f5f8'},
-  pI: c => ({width:28,height:28,borderRadius:'50%',background:c,display:'inline-flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:700,flexShrink:0}),
-};
-const PF = id => PLATFORMS.find(x=>x.id===id) || {color:'#999',icon:'?',name:id};
-const fN = n => typeof n==='number'? n.toLocaleString() : n;
-const SB = ({s}) => {
-  const m = {published:['#d4edda','#155724','เผยแพร่แล้ว'],scheduled:['#cce5ff','#004085','นัดเวลา'],draft:['#f8f9fa','#636e72','แบบร่าง'],active:['#d4edda','#155724','กำลังทำงาน'],paused:['#fff3cd','#856404','หยุดชั่วคราว'],ended:['#f8d7da','#721c24','สิ้นสุด']};
-  const [bg,c,t] = m[s]||['#f0f0f5','#636e72',s];
-  return <span style={S.badge(bg,c)}>{t}</span>;
-};
-const today = () => new Date().toISOString().split('T')[0];
+/* ═══ CONSTANTS ═══ */
+const PLATFORMS = [
+  {id:'facebook',name:'Facebook',color:'#1877F2',icon:'📘',bg:'linear-gradient(135deg,#1877F2,#42a5f5)'},
+  {id:'instagram',name:'Instagram',color:'#E4405F',icon:'📷',bg:'linear-gradient(135deg,#833AB4,#E4405F,#FCAF45)'},
+  {id:'twitter',name:'X (Twitter)',color:'#000',icon:'𝕏',bg:'linear-gradient(135deg,#14171A,#657786)'},
+  {id:'tiktok',name:'TikTok',color:'#000',icon:'🎵',bg:'linear-gradient(135deg,#010101,#FF0050,#00F2EA)'},
+  {id:'line',name:'LINE Official',color:'#06C755',icon:'💚',bg:'linear-gradient(135deg,#06C755,#00B900)'},
+];
+const PERMS = [
+  {id:'view_dashboard',label:'ดูแดชบอร์ด',icon:'🏠'},
+  {id:'edit_data',label:'กรอกข้อมูล',icon:'📝'},
+  {id:'view_reports',label:'ดูรายงาน',icon:'📊'},
+  {id:'manage_content',label:'จัดการคอนเทนต์',icon:'📋'},
+  {id:'view_messages',label:'ดูข้อความ',icon:'💬'},
+  {id:'ai_analytics',label:'AI วิเคราะห์',icon:'🤖'},
+  {id:'manage_users',label:'จัดการผู้ใช้',icon:'⚙️'},
+];
+const DEFAULT_METRICS = [
+  {id:'followers',name:'ผู้ติดตาม',unit:'คน',icon:'👥',isDefault:true},
+  {id:'reach',name:'การเข้าถึง',unit:'ครั้ง',icon:'📈',isDefault:true},
+  {id:'engagement',name:'การมีส่วนร่วม',unit:'ครั้ง',icon:'🤝',isDefault:true},
+  {id:'clicks',name:'คลิกลิงก์',unit:'ครั้ง',icon:'👆',isDefault:true},
+  {id:'shares',name:'แชร์',unit:'ครั้ง',icon:'🔄',isDefault:true},
+  {id:'comments',name:'คอมเมนต์',unit:'ครั้ง',icon:'💬',isDefault:true},
+  {id:'impressions',name:'Impressions',unit:'ครั้ง',icon:'👁️',isDefault:true},
+  {id:'videoViews',name:'ยอดวิว',unit:'ครั้ง',icon:'▶️',isDefault:true},
+];
+const INIT_USERS = [
+  {id:1,username:'admin',password:'admin123',name:'Admin',role:'admin',approved:true,
+   permissions:PERMS.map(p=>p.id)}
+];
 
-/* ═══ PENGUIN LOGIN ═══ */
+/* ═══ DESIGN SYSTEM ═══ */
+const T = {
+  primary: '#6c5ce7',
+  primaryDark: '#5a4bd1',
+  primaryLight: '#a29bfe',
+  success: '#00b894',
+  danger: '#e17055',
+  warning: '#fdcb6e',
+  info: '#0984e3',
+  dark: '#1a1a2e',
+  gray: '#636e72',
+  lightGray: '#b2bec3',
+  bg: '#f5f6fa',
+  card: '#ffffff',
+  border: '#f0f0f5',
+};
+
+const fmt = n => typeof n === 'number' ? n.toLocaleString() : n;
+const today = () => new Date().toISOString().split('T')[0];
+const PF = id => PLATFORMS.find(p => p.id === id) || {color:'#999', icon:'?', name:id, bg:'#999'};
+
+/* ═══ REUSABLE COMPONENTS ═══ */
+
+// Beautiful button component
+const Btn = ({variant='primary', size='md', onClick, children, disabled, loading, style={}, icon}) => {
+  const [hover, setHover] = useState(false);
+  const [press, setPress] = useState(false);
+  const sizes = {
+    sm: {padding:'6px 14px', fontSize:12},
+    md: {padding:'10px 20px', fontSize:13},
+    lg: {padding:'14px 28px', fontSize:15},
+  };
+  const variants = {
+    primary: {
+      background: hover ? 'linear-gradient(135deg,#5a4bd1,#8b7ff5)' : 'linear-gradient(135deg,#6c5ce7,#a29bfe)',
+      color:'white', boxShadow: hover ? '0 8px 20px rgba(108,92,231,0.4)' : '0 4px 12px rgba(108,92,231,0.3)'
+    },
+    success: {
+      background: hover ? '#00a884' : 'linear-gradient(135deg,#00b894,#55efc4)',
+      color:'white', boxShadow: hover ? '0 8px 20px rgba(0,184,148,0.4)' : '0 4px 12px rgba(0,184,148,0.25)'
+    },
+    danger: {
+      background: hover ? '#d15b3d' : 'linear-gradient(135deg,#e17055,#ff8c69)',
+      color:'white', boxShadow: hover ? '0 8px 20px rgba(225,112,85,0.4)' : '0 4px 12px rgba(225,112,85,0.25)'
+    },
+    ghost: {
+      background: hover ? '#f0f0f5' : 'transparent', color: T.gray,
+      border: '1px solid #dfe6e9'
+    },
+    outline: {
+      background: hover ? 'rgba(108,92,231,0.08)' : 'transparent',
+      color: T.primary, border: '1.5px solid ' + T.primary
+    },
+  };
+  return <button
+    onClick={onClick} disabled={disabled||loading}
+    onMouseEnter={()=>setHover(true)} onMouseLeave={()=>{setHover(false); setPress(false);}}
+    onMouseDown={()=>setPress(true)} onMouseUp={()=>setPress(false)}
+    style={{
+      border:'none', borderRadius:10, cursor:disabled||loading?'not-allowed':'pointer',
+      fontWeight:600, fontFamily:'inherit',
+      display:'inline-flex', alignItems:'center', gap:6,
+      transition:'all 0.2s cubic-bezier(0.4,0,0.2,1)',
+      transform: press ? 'scale(0.97)' : hover ? 'translateY(-1px)' : 'translateY(0)',
+      opacity: disabled ? 0.5 : 1,
+      ...sizes[size], ...variants[variant], ...style
+    }}>
+    {loading ? <span style={{display:'inline-block',width:14,height:14,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'white',borderRadius:'50%',animation:'sp 0.6s linear infinite'}}/> : icon}
+    {children}
+  </button>;
+};
+
+// Modal component with backdrop blur and fade
+const Modal = ({open, onClose, title, children, width='500px', footer}) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (open) { setMounted(true); document.body.style.overflow = 'hidden'; }
+    else { document.body.style.overflow = ''; setTimeout(() => setMounted(false), 200); }
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+  if (!mounted && !open) return null;
+  return <div style={{
+    position:'fixed', inset:0, zIndex:1000,
+    display:'flex', alignItems:'center', justifyContent:'center',
+    padding:20, animation: open?'fadeIn 0.2s ease':'fadeOut 0.2s ease',
+    opacity: open ? 1 : 0
+  }}>
+    <div onClick={onClose} style={{
+      position:'absolute', inset:0,
+      background:'rgba(15,15,35,0.6)', backdropFilter:'blur(8px)',
+      WebkitBackdropFilter:'blur(8px)'
+    }}/>
+    <div style={{
+      position:'relative', background:'white', borderRadius:20, width:'100%',
+      maxWidth:width, maxHeight:'90vh', display:'flex', flexDirection:'column',
+      boxShadow:'0 25px 80px rgba(0,0,0,0.3)',
+      animation: open?'modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1)':'modalOut 0.2s ease',
+      overflow:'hidden'
+    }}>
+      {title && <div style={{padding:'20px 24px', borderBottom:'1px solid '+T.border, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+        <div style={{fontWeight:700, fontSize:16, color:T.dark}}>{title}</div>
+        <button onClick={onClose} style={{
+          border:'none', background:T.bg, borderRadius:10, width:32, height:32,
+          cursor:'pointer', fontSize:16, color:T.gray,
+          display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s'
+        }} onMouseEnter={e=>e.currentTarget.style.background='#e8e8f0'}
+          onMouseLeave={e=>e.currentTarget.style.background=T.bg}>✕</button>
+      </div>}
+      <div style={{padding:'20px 24px', overflowY:'auto', flex:1}}>{children}</div>
+      {footer && <div style={{padding:'16px 24px', borderTop:'1px solid '+T.border, display:'flex', gap:8, justifyContent:'flex-end'}}>{footer}</div>}
+    </div>
+  </div>;
+};
+
+// Toast notification
+const useToast = () => {
+  const [toasts, setToasts] = useState([]);
+  const show = (msg, type='success') => {
+    const id = Date.now();
+    setToasts(t => [...t, {id, msg, type}]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+  };
+  const Toaster = () => <div style={{position:'fixed', top:20, right:20, zIndex:2000, display:'flex', flexDirection:'column', gap:8}}>
+    {toasts.map(t => <div key={t.id} style={{
+      padding:'12px 20px', borderRadius:12, color:'white', fontWeight:500, fontSize:14,
+      background: t.type==='success' ? 'linear-gradient(135deg,#00b894,#55efc4)' :
+                  t.type==='error' ? 'linear-gradient(135deg,#e17055,#ff8c69)' :
+                  'linear-gradient(135deg,#0984e3,#74b9ff)',
+      boxShadow:'0 8px 24px rgba(0,0,0,0.15)', animation:'slideInRight 0.3s ease',
+      display:'flex', alignItems:'center', gap:8
+    }}>
+      <span>{t.type==='success'?'✅':t.type==='error'?'❌':'ℹ️'}</span>{t.msg}
+    </div>)}
+  </div>;
+  return {show, Toaster};
+};
+
+// Fade page transition
+const PageWrap = ({children, keyId}) => (
+  <div key={keyId} style={{animation:'fadeSlideIn 0.35s cubic-bezier(0.4,0,0.2,1)'}}>{children}</div>
+);
+
+// Card
+const Card = ({children, style={}, hover=false, onClick}) => {
+  const [h, setH] = useState(false);
+  return <div onClick={onClick}
+    onMouseEnter={()=>hover&&setH(true)} onMouseLeave={()=>setH(false)}
+    style={{
+      background:'white', borderRadius:16, padding:20,
+      boxShadow: hover&&h ? '0 12px 32px rgba(0,0,0,0.08)' : '0 2px 12px rgba(0,0,0,0.04)',
+      border:'1px solid '+T.border,
+      transform: hover&&h ? 'translateY(-2px)' : 'translateY(0)',
+      transition:'all 0.25s cubic-bezier(0.4,0,0.2,1)',
+      cursor: onClick?'pointer':'default',
+      ...style
+    }}>{children}</div>;
+};
+
+// Input
+const Input = ({label, type='text', value, onChange, placeholder, icon, style={}}) => (
+  <div style={{marginBottom:14, ...style}}>
+    {label && <label style={{fontSize:12, color:T.gray, fontWeight:500, marginBottom:6, display:'block'}}>{label}</label>}
+    <div style={{position:'relative'}}>
+      {icon && <span style={{position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', fontSize:14, color:T.lightGray, pointerEvents:'none'}}>{icon}</span>}
+      <input type={type} value={value||''} onChange={onChange} placeholder={placeholder}
+        style={{
+          width:'100%', padding: icon?'12px 14px 12px 38px':'12px 14px',
+          borderRadius:10, border:'1.5px solid #e4e6ea', fontSize:14, outline:'none',
+          transition:'border-color 0.2s', boxSizing:'border-box', fontFamily:'inherit'
+        }}
+        onFocus={e => e.target.style.borderColor = T.primary}
+        onBlur={e => e.target.style.borderColor = '#e4e6ea'}/>
+    </div>
+  </div>
+);
+
+const Select = ({label, value, onChange, options, style={}}) => (
+  <div style={{marginBottom:14, ...style}}>
+    {label && <label style={{fontSize:12, color:T.gray, fontWeight:500, marginBottom:6, display:'block'}}>{label}</label>}
+    <select value={value} onChange={onChange} style={{
+      width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e4e6ea',
+      fontSize:14, outline:'none', background:'white', cursor:'pointer', fontFamily:'inherit'
+    }}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+  </div>
+);
+
+const Textarea = ({label, value, onChange, placeholder, rows=3, style={}}) => (
+  <div style={{marginBottom:14, ...style}}>
+    {label && <label style={{fontSize:12, color:T.gray, fontWeight:500, marginBottom:6, display:'block'}}>{label}</label>}
+    <textarea value={value||''} onChange={onChange} placeholder={placeholder} rows={rows} style={{
+      width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e4e6ea',
+      fontSize:14, outline:'none', resize:'vertical', fontFamily:'inherit', boxSizing:'border-box'
+    }}
+      onFocus={e => e.target.style.borderColor = T.primary}
+      onBlur={e => e.target.style.borderColor = '#e4e6ea'}/>
+  </div>
+);
+
+const Badge = ({children, color='#6c5ce7', bg}) => (
+  <span style={{
+    display:'inline-flex', alignItems:'center', gap:4,
+    padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:600,
+    color, background: bg || (color+'20')
+  }}>{children}</span>
+);
+
+/* ═══ PENGUIN (login mascot) ═══ */
 const Penguin = ({state, welcomeName}) => {
   const t = state==='curious'?'rotate(-8deg)':state==='happy'?'scale(1.05)':'none';
-  return <div style={{position:'relative',width:200,height:220,margin:'0 auto'}}>
-    <svg viewBox="0 0 200 220" style={{transform:t,transition:'transform 0.5s cubic-bezier(.68,-.55,.27,1.55)',width:'100%',height:'100%'}}>
+  return <div style={{position:'relative', width:180, height:200, margin:'0 auto'}}>
+    <svg viewBox="0 0 200 220" style={{transform:t, transition:'transform 0.5s cubic-bezier(.68,-.55,.27,1.55)', width:'100%', height:'100%'}}>
       <ellipse cx="100" cy="210" rx="55" ry="8" fill="rgba(0,0,0,0.1)"/>
       <ellipse cx="100" cy="135" rx="65" ry="75" fill="#2d3436"/>
       <ellipse cx="100" cy="140" rx="45" ry="58" fill="white"/>
@@ -222,490 +397,1350 @@ const Penguin = ({state, welcomeName}) => {
       {state==='covering' ? <React.Fragment>
         <ellipse cx="72" cy="82" rx="28" ry="22" fill="#2d3436" opacity="0.9"/>
         <ellipse cx="128" cy="82" rx="28" ry="22" fill="#2d3436" opacity="0.9"/>
-        <path d="M75,82 Q82,78 89,82" stroke="white" strokeWidth="2" fill="none"/>
-        <path d="M111,82 Q118,78 125,82" stroke="white" strokeWidth="2" fill="none"/>
       </React.Fragment> : <React.Fragment>
         <ellipse cx={state==='curious'?83:85} cy="80" rx="13" ry="14" fill="white" stroke="#2d3436" strokeWidth="1"/>
         <ellipse cx={state==='curious'?123:115} cy="80" rx="13" ry="14" fill="white" stroke="#2d3436" strokeWidth="1"/>
         <circle cx={state==='curious'?86:87} cy={state==='happy'?78:81} r={state==='happy'?5:6} fill="#2d3436"/>
         <circle cx={state==='curious'?120:113} cy={state==='happy'?78:81} r={state==='happy'?5:6} fill="#2d3436"/>
-        {state==='curious' && <React.Fragment><path d="M73,68 Q83,62 93,68" stroke="#2d3436" strokeWidth="2.5" fill="none"/><path d="M113,64 Q123,60 133,68" stroke="#2d3436" strokeWidth="2.5" fill="none"/></React.Fragment>}
         {state==='happy' && <React.Fragment><circle cx="82" cy="75" r="2" fill="white"/><circle cx="108" cy="75" r="2" fill="white"/></React.Fragment>}
       </React.Fragment>}
-      {(state==='happy'||state==='covering') && <React.Fragment><ellipse cx="68" cy="92" rx="10" ry="6" fill="#ff9ff3" opacity="0.5"/><ellipse cx="132" cy="92" rx="10" ry="6" fill="#ff9ff3" opacity="0.5"/></React.Fragment>}
       <path d={state==='happy'?"M90,95 L100,103 L110,95 Z":"M92,95 L100,102 L108,95 Z"} fill="#fdcb6e" stroke="#f39c12" strokeWidth="1"/>
       {state==='happy' && <path d="M88,100 Q100,112 112,100" stroke="#2d3436" strokeWidth="2" fill="none"/>}
       <ellipse cx="78" cy="207" rx="18" ry="7" fill="#fdcb6e"/><ellipse cx="122" cy="207" rx="18" ry="7" fill="#fdcb6e"/>
       <path d="M90,118 L100,123 L110,118 L100,128 Z" fill="#6c5ce7" opacity="0.8"/>
     </svg>
-    {state==='curious' && <div style={{position:'absolute',top:-10,right:10,background:'white',borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 8px rgba(0,0,0,0.15)',fontSize:20,fontWeight:'bold',color:'#6c5ce7',animation:'bobble 0.6s ease-in-out infinite alternate'}}>?</div>}
-    {state==='happy' && <React.Fragment><div style={{position:'absolute',top:0,left:15,fontSize:16,animation:'floatUp 1.5s infinite',color:'#e84393'}}>♥</div><div style={{position:'absolute',top:10,right:20,fontSize:12,animation:'floatUp 1.8s infinite 0.3s',color:'#fd79a8'}}>♥</div></React.Fragment>}
-    {state==='happy' && welcomeName && <div style={{position:'absolute',bottom:-35,left:'50%',transform:'translateX(-50%)',whiteSpace:'nowrap',fontSize:14,fontWeight:600,color:'#6c5ce7',animation:'fadeInUp 0.5s'}}>ยินดีต้อนรับคุณ {welcomeName} 🎉</div>}
+    {state==='curious' && <div style={{position:'absolute', top:-10, right:10, background:'white', borderRadius:'50%', width:36, height:36, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(0,0,0,0.15)', fontSize:20, fontWeight:'bold', color:'#6c5ce7', animation:'bobble 0.6s infinite alternate'}}>?</div>}
+    {state==='happy' && welcomeName && <div style={{position:'absolute', bottom:-32, left:'50%', transform:'translateX(-50%)', whiteSpace:'nowrap', fontSize:14, fontWeight:600, color:'#a29bfe', animation:'fadeSlideIn 0.5s'}}>ยินดีต้อนรับคุณ {welcomeName} 🎉</div>}
   </div>;
 };
 
 /* ═══ LOGIN PAGE ═══ */
-const LoginPage = ({users, onLogin, onReq}) => {
-  const [u,sU]=useState('');const [p,sP]=useState('');const [ps,sPs]=useState('idle');const [mu,sMu]=useState(null);
-  const [pf,sPf]=useState(false);const [sr,sSr]=useState(false);const [rn,sRn]=useState('');const [ru,sRu]=useState('');const [rp,sRp]=useState('');
-  const [rs,sRs]=useState(false);const [err,sErr]=useState('');const [shake,sSh]=useState(false);
-  useEffect(()=>{
-    if(pf){sPs('covering');return;}
-    if(u.length>=3){const f=users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.approved);if(f){sMu(f);sPs('happy');}else{sMu(null);sPs('curious');}}
-    else{sMu(null);sPs('idle');}
-  },[u,pf,users]);
-  const doL=()=>{const user=users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.password===p&&x.approved);if(user)onLogin(user);else{sErr('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');sSh(true);setTimeout(()=>sSh(false),600);}};
-  const doR=()=>{if(rn&&ru&&rp){onReq({name:rn,username:ru,password:rp});sRs(true);setTimeout(()=>{sSr(false);sRs(false);},2000);}};
-  const hearts=p.split('').map(()=>'♥').join('');
-  const inp=(label,val,set,opts={})=><div style={{marginBottom:opts.mb||16}}>
-    <label style={{fontSize:12,color:'rgba(255,255,255,0.5)',marginBottom:4,display:'block'}}>{label}</label>
+const LoginPage = ({users, onLogin, onRequestAccess, toast}) => {
+  const [u, sU] = useState(''), [p, sP] = useState('');
+  const [ps, sPs] = useState('idle'), [mu, sMu] = useState(null);
+  const [pf, sPf] = useState(false), [sr, sSr] = useState(false);
+  const [rn, sRn] = useState(''), [ru, sRu] = useState(''), [rp, sRp] = useState('');
+  const [rs, sRs] = useState(false), [shake, sSh] = useState(false), [loading, sL] = useState(false);
+  
+  useEffect(() => {
+    if (pf) { sPs('covering'); return; }
+    if (u.length >= 3) {
+      const f = users.find(x => String(x.username).toLowerCase() === u.toLowerCase() && x.approved);
+      if (f) { sMu(f); sPs('happy'); } else { sMu(null); sPs('curious'); }
+    } else { sMu(null); sPs('idle'); }
+  }, [u, pf, users]);
+  
+  const doLogin = async () => {
+    sL(true);
+    if (USE_SHEETS) {
+      const res = await api.post({action:'login', username:u, password:p});
+      sL(false);
+      if (res?.success) { onLogin(res.user); }
+      else { toast(res?.error || 'เข้าสู่ระบบล้มเหลว', 'error'); sSh(true); setTimeout(()=>sSh(false),600); }
+    } else {
+      const user = users.find(x => String(x.username).toLowerCase() === u.toLowerCase() && String(x.password) === p && x.approved);
+      sL(false);
+      if (user) onLogin(user);
+      else { toast('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error'); sSh(true); setTimeout(()=>sSh(false),600); }
+    }
+  };
+  
+  const doReq = async () => {
+    if (!rn || !ru || !rp) { toast('กรอกข้อมูลให้ครบ', 'error'); return; }
+    sL(true);
+    if (USE_SHEETS) await api.post({action:'requestAccess', name:rn, username:ru, password:rp});
+    else onRequestAccess({name:rn, username:ru, password:rp});
+    sL(false); sRs(true);
+    setTimeout(() => { sSr(false); sRs(false); sRn(''); sRu(''); sRp(''); }, 2000);
+  };
+  
+  const hearts = p.split('').map(()=>'♥').join('');
+  const inp = (label, val, set, opts={}) => <div style={{marginBottom: opts.mb || 14}}>
+    <label style={{fontSize:12, color:'rgba(255,255,255,0.5)', marginBottom:5, display:'block', fontWeight:500}}>{label}</label>
     <div style={{position:'relative'}}>
-      {opts.ov && <input type="text" readOnly value={opts.ov} style={{width:'100%',padding:'12px 16px 12px 40px',borderRadius:12,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.08)',color:'#e84393',fontSize:18,letterSpacing:4,outline:'none',boxSizing:'border-box',position:'absolute',top:0,left:0,pointerEvents:'none',zIndex:1}}/>}
-      <input type={opts.type||'text'} value={val} onChange={e=>{set(e.target.value);sErr('');}} onFocus={opts.onFocus} onBlur={opts.onBlur} onKeyDown={opts.onKey} placeholder={opts.ph}
-        style={{width:'100%',padding:'12px 16px 12px 40px',borderRadius:12,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.08)',color:opts.ov?'transparent':'white',fontSize:15,outline:'none',boxSizing:'border-box',position:'relative',zIndex:opts.ov?2:1,caretColor:'#a29bfe'}}/>
-      <span style={{position:'absolute',left:14,top:'50%',transform:'translateY(-50%)',color:opts.ic||'rgba(255,255,255,0.3)',fontSize:16,zIndex:3,pointerEvents:'none'}}>{opts.icon||'👤'}</span>
+      {opts.ov && <input type="text" readOnly value={opts.ov} style={{width:'100%', padding:'13px 16px 13px 42px', borderRadius:12, border:'1.5px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.05)', color:'#e84393', fontSize:18, letterSpacing:4, outline:'none', boxSizing:'border-box', position:'absolute', top:0, left:0, pointerEvents:'none', zIndex:1}}/>}
+      <input type={opts.type||'text'} value={val} onChange={e=>set(e.target.value)} onFocus={opts.onFocus} onBlur={opts.onBlur} onKeyDown={opts.onKey} placeholder={opts.ph}
+        style={{width:'100%', padding:'13px 16px 13px 42px', borderRadius:12, border:'1.5px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.05)', color: opts.ov?'transparent':'white', fontSize:15, outline:'none', boxSizing:'border-box', position:'relative', zIndex: opts.ov?2:1, caretColor:'#a29bfe', transition:'border-color 0.2s'}}
+        onFocusCapture={e=>e.target.style.borderColor='rgba(162,155,254,0.5)'}
+        onBlurCapture={e=>e.target.style.borderColor='rgba(255,255,255,0.15)'}/>
+      <span style={{position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color: opts.ic || 'rgba(255,255,255,0.35)', fontSize:16, zIndex:3, pointerEvents:'none'}}>{opts.icon || '👤'}</span>
     </div>
   </div>;
-  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0c0c1d,#1a1a3e 30%,#2d1b69 60%,#1a1a3e)',position:'relative',overflow:'hidden'}}>
-    <div style={{width:420,maxWidth:'92vw',padding:'40px 36px',borderRadius:24,background:'rgba(255,255,255,0.06)',backdropFilter:'blur(20px)',border:'1px solid rgba(255,255,255,0.1)',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',animation:shake?'shakeX 0.6s':'none',position:'relative',zIndex:1}}>
-      <div style={{textAlign:'center',marginBottom:8}}><div style={{fontSize:24,fontWeight:800,color:'white'}}><span style={{color:'#a29bfe'}}>📊</span> SocialPulse</div><div style={{fontSize:12,color:'rgba(255,255,255,0.4)',marginTop:2}}>Social Media Analytics Dashboard</div></div>
-      <Penguin state={ps} welcomeName={mu?.name}/><div style={{height:mu?30:10}}/>
+  
+  return <div style={{minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'linear-gradient(135deg,#0c0c1d,#1a1a3e 30%,#2d1b69 60%,#1a1a3e)', position:'relative', overflow:'hidden', padding:20}}>
+    <div style={{position:'absolute', inset:0, pointerEvents:'none', opacity:0.7}}>{[...Array(20)].map((_,i)=><div key={i} style={{position:'absolute', width:3+Math.random()*5, height:3+Math.random()*5, background:`rgba(${108+Math.random()*50},${92+Math.random()*50},231,${0.2+Math.random()*0.3})`, borderRadius:'50%', left:`${Math.random()*100}%`, top:`${Math.random()*100}%`, animation:`drift ${8+Math.random()*15}s ease-in-out infinite alternate`, animationDelay:`${Math.random()*5}s`}}/>)}</div>
+    <div style={{width:420, maxWidth:'92vw', padding:'36px 32px', borderRadius:24, background:'rgba(255,255,255,0.05)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'1px solid rgba(255,255,255,0.1)', boxShadow:'0 25px 80px rgba(0,0,0,0.4)', animation: shake?'shakeX 0.6s':'fadeSlideIn 0.5s', position:'relative', zIndex:1}}>
+      <div style={{textAlign:'center', marginBottom:8}}>
+        <div style={{fontSize:26, fontWeight:800, color:'white', letterSpacing:0.5}}><span style={{color:'#a29bfe'}}>📊</span> SocialPulse</div>
+        <div style={{fontSize:12, color:'rgba(255,255,255,0.4)', marginTop:3}}>Social Media Analytics Dashboard</div>
+      </div>
+      <Penguin state={ps} welcomeName={mu?.name}/><div style={{height: mu ? 28 : 12}}/>
       {!sr ? <React.Fragment>
-        {inp('ชื่อผู้ใช้',u,sU,{ph:'กรอกชื่อผู้ใช้...',icon:'👤',onFocus:()=>sPf(false)})}
-        {inp('รหัสผ่าน',p,sP,{ph:'กรอกรหัสผ่าน...',type:'password',icon:'♥',ic:'#e84393',ov:hearts,onFocus:()=>sPf(true),onBlur:()=>sPf(false),onKey:e=>{if(e.key==='Enter')doL();}})}
-        {err && <div style={{color:'#ff6b6b',fontSize:13,marginBottom:12,textAlign:'center',animation:'fadeInUp 0.3s'}}>{err}</div>}
-        <button onClick={doL} style={{width:'100%',padding:14,borderRadius:12,border:'none',background:'linear-gradient(135deg,#6c5ce7,#a29bfe)',color:'white',fontSize:16,fontWeight:700,cursor:'pointer',marginBottom:12,boxShadow:'0 4px 15px rgba(108,92,231,0.4)'}}>เข้าสู่ระบบ</button>
-        <button onClick={()=>sSr(true)} style={{width:'100%',padding:12,borderRadius:12,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer'}}>✉️ ขอเข้าใช้บริการ</button>
-        <div style={{textAlign:'center',marginTop:16,fontSize:11,color:'rgba(255,255,255,0.25)'}}>Demo: admin / admin123</div>
-        {!USE_SHEETS && <div style={{textAlign:'center',marginTop:8,fontSize:10,color:'rgba(255,255,255,0.2)'}}>⚠️ โหมด Demo — ยังไม่ได้เชื่อมต่อ Google Sheets</div>}
-      </React.Fragment> : <div style={{animation:'fadeInUp 0.4s'}}>
-        <div style={{fontSize:18,fontWeight:700,color:'white',textAlign:'center',marginBottom:20}}>📋 ขอเข้าใช้บริการ</div>
-        {rs ? <div style={{textAlign:'center',color:'#00b894',fontSize:15,padding:30}}>✅ ส่งคำขอเรียบร้อย!</div> : <React.Fragment>
-          {inp('ชื่อ-นามสกุล',rn,sRn,{ph:'กรอกชื่อ',icon:'📝',mb:14})}
-          {inp('ชื่อผู้ใช้',ru,sRu,{ph:'กรอกชื่อผู้ใช้',icon:'👤',mb:14})}
-          {inp('รหัสผ่าน',rp,sRp,{type:'password',ph:'กรอกรหัสผ่าน',icon:'🔑',mb:14})}
-          <button onClick={doR} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:'linear-gradient(135deg,#00b894,#55efc4)',color:'#1a1a2e',fontSize:15,fontWeight:700,cursor:'pointer',marginBottom:10}}>ส่งคำขอ</button>
-          <button onClick={()=>sSr(false)} style={{width:'100%',padding:10,borderRadius:10,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(255,255,255,0.5)',fontSize:13,cursor:'pointer'}}>← กลับ</button>
+        {inp('ชื่อผู้ใช้', u, sU, {ph:'กรอกชื่อผู้ใช้...', icon:'👤', onFocus:()=>sPf(false)})}
+        {inp('รหัสผ่าน', p, sP, {ph:'กรอกรหัสผ่าน...', type:'password', icon:'♥', ic:'#e84393', ov:hearts, onFocus:()=>sPf(true), onBlur:()=>sPf(false), onKey:e=>{if(e.key==='Enter')doLogin();}})}
+        <button onClick={doLogin} disabled={loading} style={{
+          width:'100%', padding:14, borderRadius:12, border:'none',
+          background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', color:'white',
+          fontSize:15, fontWeight:700, cursor: loading?'wait':'pointer', marginBottom:10,
+          boxShadow:'0 8px 24px rgba(108,92,231,0.4)', fontFamily:'inherit',
+          transition:'all 0.2s'
+        }}>{loading?'⏳ กำลังเข้าสู่ระบบ...':'เข้าสู่ระบบ'}</button>
+        <button onClick={()=>sSr(true)} style={{width:'100%', padding:11, borderRadius:12, border:'1px solid rgba(255,255,255,0.15)', background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:13, cursor:'pointer', fontFamily:'inherit'}}>✉️ ขอเข้าใช้บริการ</button>
+        <div style={{textAlign:'center', marginTop:16, fontSize:11, color:'rgba(255,255,255,0.25)'}}>Demo: admin / admin123</div>
+        {!USE_SHEETS && <div style={{textAlign:'center', marginTop:6, fontSize:10, color:'rgba(255,255,255,0.2)'}}>⚠️ ยังไม่ได้เชื่อมต่อ Google Sheets</div>}
+      </React.Fragment> : <div style={{animation:'fadeSlideIn 0.4s'}}>
+        <div style={{fontSize:17, fontWeight:700, color:'white', textAlign:'center', marginBottom:18}}>📋 ขอเข้าใช้บริการ</div>
+        {rs ? <div style={{textAlign:'center', color:'#00b894', fontSize:15, padding:'30px 0', fontWeight:600}}>✅ ส่งคำขอเรียบร้อย!<br/><span style={{fontSize:12, color:'rgba(255,255,255,0.5)', fontWeight:400}}>รอ Admin อนุมัติ</span></div> : <React.Fragment>
+          {inp('ชื่อ-นามสกุล', rn, sRn, {ph:'ชื่อเต็ม', icon:'📝'})}
+          {inp('ชื่อผู้ใช้', ru, sRu, {ph:'username', icon:'👤'})}
+          {inp('รหัสผ่าน', rp, sRp, {type:'password', ph:'password', icon:'🔑'})}
+          <button onClick={doReq} disabled={loading} style={{width:'100%', padding:12, borderRadius:12, border:'none', background:'linear-gradient(135deg,#00b894,#55efc4)', color:'#1a1a2e', fontSize:14, fontWeight:700, cursor:'pointer', marginBottom:8, fontFamily:'inherit'}}>{loading?'⏳ ส่ง...':'ส่งคำขอ'}</button>
+          <button onClick={()=>sSr(false)} style={{width:'100%', padding:10, borderRadius:12, border:'1px solid rgba(255,255,255,0.15)', background:'transparent', color:'rgba(255,255,255,0.5)', fontSize:13, cursor:'pointer', fontFamily:'inherit'}}>← กลับ</button>
         </React.Fragment>}
       </div>}
     </div>
-    <style>{`@keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(20px,-20px)}}@keyframes bobble{0%{transform:translateY(0)}100%{transform:translateY(-6px)}}@keyframes floatUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-30px)}}@keyframes fadeInUp{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}input::placeholder{color:rgba(255,255,255,0.25)}`}</style>
   </div>;
 };
 
 /* ═══ SIDEBAR ═══ */
 const Sidebar = ({page, setPage, user, onLogout, co, setCo}) => {
-  const items = [{id:'dashboard',icon:'🏠',label:'ภาพรวม',perm:'view_dashboard'},{id:'data',icon:'📝',label:'กรอกข้อมูล',perm:'edit_data'},{id:'reports',icon:'📊',label:'รายงาน',perm:'view_reports'},{id:'content',icon:'📋',label:'คอนเทนต์',perm:'manage_content'},{id:'messages',icon:'💬',label:'ข้อความ',perm:'view_messages'},{id:'ads',icon:'📢',label:'โฆษณา',perm:'manage_ads'},{id:'ai',icon:'🤖',label:'AI วิเคราะห์',perm:'ai_analytics'},{id:'admin',icon:'⚙️',label:'จัดการผู้ใช้',perm:'manage_users'}].filter(i=>user.role==='admin'||user.permissions?.includes(i.perm));
-  return <div style={{width:co?70:240,minHeight:'100vh',background:'linear-gradient(180deg,#1a1a3e,#0c0c1d)',color:'white',display:'flex',flexDirection:'column',transition:'width 0.3s',position:'fixed',left:0,top:0,zIndex:100}}>
-    <div style={{padding:'20px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
-      {!co && <span style={{fontWeight:800,fontSize:18}}><span style={{color:'#a29bfe'}}>📊</span> SocialPulse</span>}
-      <button onClick={()=>setCo(!co)} style={{background:'none',border:'none',color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:16}}>{co?'▶':'◀'}</button>
+  const items = [
+    {id:'dashboard', icon:'🏠', label:'ภาพรวม', perm:'view_dashboard'},
+    {id:'data', icon:'📝', label:'กรอกข้อมูล', perm:'edit_data'},
+    {id:'reports', icon:'📊', label:'รายงาน', perm:'view_reports'},
+    {id:'content', icon:'📋', label:'คอนเทนต์', perm:'manage_content'},
+    {id:'messages', icon:'💬', label:'ข้อความ', perm:'view_messages'},
+    {id:'ai', icon:'🤖', label:'AI วิเคราะห์', perm:'ai_analytics', badge:'AI'},
+    {id:'admin', icon:'⚙️', label:'จัดการผู้ใช้', perm:'manage_users'},
+  ].filter(i => user.role === 'admin' || user.permissions?.includes(i.perm));
+  
+  return <div style={{
+    width: co ? 72 : 240, minHeight:'100vh',
+    background:'linear-gradient(180deg,#1a1a3e,#0c0c1d)', color:'white',
+    display:'flex', flexDirection:'column', transition:'width 0.3s cubic-bezier(0.4,0,0.2,1)',
+    position:'fixed', left:0, top:0, zIndex:100
+  }}>
+    <div style={{padding:'20px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+      {!co && <span style={{fontWeight:800, fontSize:18, whiteSpace:'nowrap'}}><span style={{color:'#a29bfe'}}>📊</span> SocialPulse</span>}
+      <button onClick={()=>setCo(!co)} style={{background:'rgba(255,255,255,0.05)', border:'none', color:'rgba(255,255,255,0.6)', cursor:'pointer', fontSize:14, width:28, height:28, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s'}}
+        onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.1)'}
+        onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.05)'}>{co?'▶':'◀'}</button>
     </div>
-    <div style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>{items.map(i=><button key={i.id} onClick={()=>setPage(i.id)} style={{width:'100%',padding:co?'12px 0':'10px 14px',borderRadius:10,border:'none',background:page===i.id?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'transparent',color:page===i.id?'white':'rgba(255,255,255,0.55)',fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,textAlign:'left'}} onMouseOver={e=>{if(page!==i.id)e.currentTarget.style.background='rgba(108,92,231,0.15)';}} onMouseOut={e=>{if(page!==i.id)e.currentTarget.style.background='transparent';}}><span style={{fontSize:18,minWidth:co?'100%':24,textAlign:'center'}}>{i.icon}</span>{!co && <span style={{fontWeight:page===i.id?600:400}}>{i.label}</span>}</button>)}</div>
-    <div style={{padding:'12px 16px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
-      {!co && <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:'50%',background:'linear-gradient(135deg,#6c5ce7,#a29bfe)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700}}>{user.name?.[0]}</div><div><div style={{fontSize:13,fontWeight:600}}>{user.name}</div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>{user.role}</div></div></div>}
-      <button onClick={onLogout} style={{width:'100%',padding:8,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'rgba(255,255,255,0.5)',fontSize:12,cursor:'pointer'}}>{co?'🚪':'🚪 ออกจากระบบ'}</button>
+    <div style={{flex:1, padding:'12px 10px', overflowY:'auto'}}>
+      {items.map(i => {
+        const active = page === i.id;
+        return <button key={i.id} onClick={()=>setPage(i.id)} style={{
+          width:'100%', padding: co?'14px 0':'11px 14px', borderRadius:12, border:'none',
+          background: active ? 'linear-gradient(135deg,#6c5ce7,#a29bfe)' : 'transparent',
+          color: active ? 'white' : 'rgba(255,255,255,0.6)',
+          fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:12,
+          marginBottom:4, textAlign:'left', fontFamily:'inherit',
+          transition:'all 0.2s cubic-bezier(0.4,0,0.2,1)',
+          boxShadow: active ? '0 8px 20px rgba(108,92,231,0.35)' : 'none',
+          transform: active ? 'translateX(3px)' : 'none'
+        }}
+          onMouseEnter={e=>{if(!active) e.currentTarget.style.background='rgba(108,92,231,0.15)';}}
+          onMouseLeave={e=>{if(!active) e.currentTarget.style.background='transparent';}}>
+          <span style={{fontSize:18, minWidth: co?'100%':22, textAlign:'center'}}>{i.icon}</span>
+          {!co && <React.Fragment>
+            <span style={{fontWeight: active ? 600 : 500, flex:1}}>{i.label}</span>
+            {i.badge && <span style={{background:'#00b894', color:'white', fontSize:9, padding:'2px 7px', borderRadius:20, fontWeight:700}}>{i.badge}</span>}
+          </React.Fragment>}
+        </button>;
+      })}
     </div>
-  </div>;
-};
-
-/* ═══ PAGE: DASHBOARD — ดูได้ทุก role, กรองรายวัน/เดือน/ปี ═══ */
-const DashPage = ({entries, metrics, viewMode, setViewMode}) => {
-  const agg = useMemo(() => {
-    const result = {};
-    PLATFORMS.forEach(p => { result[p.id] = {}; metrics.forEach(m => { result[p.id][m.id] = 0; }); });
-    const now = new Date();
-    entries.forEach(e => {
-      const d = new Date(e.date);
-      let include = false;
-      if (viewMode === 'day') include = e.date === today();
-      else if (viewMode === 'month') include = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      else if (viewMode === 'year') include = d.getFullYear() === now.getFullYear();
-      else include = true;
-      if (include && result[e.platform]) {
-        metrics.forEach(m => { if (e[m.id] !== undefined) result[e.platform][m.id] += Number(e[m.id]) || 0; });
-      }
-    });
-    return result;
-  }, [entries, metrics, viewMode]);
-
-  const chartData = useMemo(() => {
-    const byDate = {};
-    entries.forEach(e => {
-      if (!byDate[e.date]) byDate[e.date] = {};
-      PLATFORMS.forEach(p => { if (!byDate[e.date][p.id]) byDate[e.date][p.id] = 0; });
-      if (e.platform) byDate[e.date][e.platform] = (byDate[e.date][e.platform]||0) + (Number(e.engagement)||Number(e.reach)||0);
-    });
-    return Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).slice(-14).map(([d,v])=>({name:d.slice(5),...v}));
-  }, [entries]);
-
-  const viewLabels = {day:'วันนี้',month:'เดือนนี้',year:'ปีนี้',all:'ทั้งหมด'};
-
-  return <div style={{padding:'24px 28px',maxWidth:1400}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24,flexWrap:'wrap',gap:12}}>
-      <div><div style={{fontSize:24,fontWeight:800,color:'#1a1a2e'}}>📊 ภาพรวมข้อมูลทั้งหมด</div><div style={{fontSize:13,color:'#636e72',marginTop:4}}>ติดตามผลการดำเนินงานทุกช่องทาง</div></div>
-      <div style={{display:'flex',gap:8}}>{Object.entries(viewLabels).map(([k,v])=><button key={k} onClick={()=>setViewMode(k)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:viewMode===k?'#6c5ce7':'#f0f0f5',color:viewMode===k?'white':'#636e72',fontSize:13,cursor:'pointer',fontWeight:viewMode===k?600:400}}>{v}</button>)}</div>
-    </div>
-
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16,marginBottom:24}}>
-      {PLATFORMS.map(p => <div key={p.id} style={{...S.card,padding:'20px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}><div style={S.pI(p.color)}>{p.icon}</div><div style={{fontWeight:700,fontSize:16}}>{p.name}</div></div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          {metrics.slice(0,4).map(m => <div key={m.id} style={{padding:'8px 10px',background:'#f8f7ff',borderRadius:8}}>
-            <div style={{fontSize:10,color:'#b2bec3'}}>{m.icon} {m.name}</div>
-            <div style={{fontSize:18,fontWeight:800,color:'#2d3436'}}>{fN(agg[p.id]?.[m.id] || 0)}</div>
-            <div style={{fontSize:10,color:'#b2bec3'}}>{m.unit}</div>
-          </div>)}
+    <div style={{padding:'14px 16px', borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+      {!co && <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:10}}>
+        <div style={{width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700}}>{user.name?.[0]}</div>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:13, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{user.name}</div>
+          <div style={{fontSize:11, color:'rgba(255,255,255,0.4)'}}>{user.role}</div>
         </div>
-        {metrics.length > 4 && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>
-          {metrics.slice(4).map(m => <div key={m.id} style={{padding:'6px 10px',background:'#fafafa',borderRadius:6}}>
-            <div style={{fontSize:10,color:'#b2bec3'}}>{m.icon} {m.name}</div>
-            <div style={{fontSize:14,fontWeight:700}}>{fN(agg[p.id]?.[m.id] || 0)}</div>
-          </div>)}
-        </div>}
-      </div>)}
+      </div>}
+      <button onClick={onLogout} style={{width:'100%', padding:8, borderRadius:8, border:'1px solid rgba(255,255,255,0.1)', background:'transparent', color:'rgba(255,255,255,0.6)', fontSize:12, cursor:'pointer', fontFamily:'inherit', transition:'all 0.2s'}}
+        onMouseEnter={e=>{e.currentTarget.style.background='rgba(225,112,85,0.15)'; e.currentTarget.style.color='#e17055';}}
+        onMouseLeave={e=>{e.currentTarget.style.background='transparent'; e.currentTarget.style.color='rgba(255,255,255,0.6)';}}>
+        {co ? '🚪' : '🚪 ออกจากระบบ'}
+      </button>
     </div>
-
-    {chartData.length > 0 && <div style={S.card}>
-      <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>แนวโน้ม 14 วันล่าสุด</div>
-      <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f5"/>
-          <XAxis dataKey="name" tick={{fontSize:11,fill:'#b2bec3'}}/>
-          <YAxis tick={{fontSize:11,fill:'#b2bec3'}} tickFormatter={v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}/>
-          <Tooltip formatter={v=>fN(v)}/>
-          {PLATFORMS.map(p=><Line key={p.id} type="monotone" dataKey={p.id} stroke={p.color} strokeWidth={2} dot={false} name={p.name}/>)}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>}
   </div>;
 };
 
-/* ═══ PAGE: DATA ENTRY — สร้างตัวชี้วัดใหม่ + กรอกรายวัน/เดือน/ปี ═══ */
-const DataPage = ({entries, setEntries, metrics, setMetrics}) => {
-  const [selPlat, setSelPlat] = useState('facebook');
-  const [selDate, setSelDate] = useState(today());
-  const [values, setValues] = useState({});
-  const [saved, setSaved] = useState(false);
-  const [showNewMetric, setShowNew] = useState(false);
-  const [newMetric, setNewMetric] = useState({name:'',unit:'ครั้ง',icon:'📊'});
-  const [viewTab, setViewTab] = useState('entry');
-  const [histPlat, setHistPlat] = useState('facebook');
+/* ═══ DASHBOARD PAGE — beautiful overview ═══ */
+const DashPage = ({entries, metrics}) => {
+  const [range, setRange] = useState('month');
+  
+  const filtered = useMemo(() => {
+    const now = new Date();
+    return entries.filter(e => {
+      const d = new Date(e.date);
+      if (range === 'day') return e.date === today();
+      if (range === 'week') { const w = new Date(); w.setDate(w.getDate()-7); return d >= w; }
+      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      if (range === 'year') return d.getFullYear() === now.getFullYear();
+      return true;
+    });
+  }, [entries, range]);
+  
+  const totals = useMemo(() => {
+    const t = {};
+    PLATFORMS.forEach(p => { t[p.id] = {}; metrics.forEach(m => t[p.id][m.id] = 0); });
+    filtered.forEach(e => {
+      if (t[e.platform]) metrics.forEach(m => {
+        const v = e.metrics?.[m.id];
+        t[e.platform][m.id] += Number(v) || 0;
+      });
+    });
+    return t;
+  }, [filtered, metrics]);
+  
+  const grand = useMemo(() => {
+    const g = {}; metrics.forEach(m => g[m.id] = 0);
+    Object.values(totals).forEach(t => metrics.forEach(m => g[m.id] += t[m.id] || 0));
+    return g;
+  }, [totals, metrics]);
+  
+  const trendData = useMemo(() => {
+    const byDate = {};
+    filtered.forEach(e => {
+      if (!byDate[e.date]) { byDate[e.date] = {}; PLATFORMS.forEach(p => byDate[e.date][p.id]=0); }
+      if (e.platform) byDate[e.date][e.platform] += Number(e.metrics?.engagement) || Number(e.metrics?.reach) || 0;
+    });
+    return Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).slice(-14).map(([d,v])=>({name:d.slice(5), ...v}));
+  }, [filtered]);
+  
+  const pieData = PLATFORMS.map(p => ({
+    name: p.name,
+    value: totals[p.id]?.engagement || totals[p.id]?.reach || 0,
+    color: p.color
+  })).filter(p => p.value > 0);
+  
+  const ranges = [{k:'day',l:'วันนี้'},{k:'week',l:'สัปดาห์'},{k:'month',l:'เดือน'},{k:'year',l:'ปี'},{k:'all',l:'ทั้งหมด'}];
+  
+  return <PageWrap keyId="dashboard">
+  <div style={{padding:'24px 28px', maxWidth:1400}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:24, flexWrap:'wrap', gap:16}}>
+      <div>
+        <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>ภาพรวมทั้งหมด</div>
+        <div style={{fontSize:13, color:T.gray, marginTop:4}}>สรุปผลการดำเนินงานทุกแพลตฟอร์ม</div>
+      </div>
+      <div style={{display:'flex', gap:6, background:'white', padding:4, borderRadius:12, boxShadow:'0 2px 8px rgba(0,0,0,0.04)'}}>
+        {ranges.map(r => <button key={r.k} onClick={()=>setRange(r.k)} style={{
+          padding:'8px 16px', borderRadius:9, border:'none',
+          background: range===r.k ? 'linear-gradient(135deg,#6c5ce7,#a29bfe)' : 'transparent',
+          color: range===r.k ? 'white' : T.gray, fontSize:13, cursor:'pointer',
+          fontWeight: range===r.k ? 600 : 500, transition:'all 0.2s', fontFamily:'inherit',
+          boxShadow: range===r.k ? '0 4px 12px rgba(108,92,231,0.3)' : 'none'
+        }}>{r.l}</button>)}
+      </div>
+    </div>
+    
+    {/* Hero stats */}
+    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:16, marginBottom:24}}>
+      {[
+        {label:'ผู้ติดตามรวม', val: grand.followers, icon:'👥', color:'#6c5ce7'},
+        {label:'การเข้าถึงรวม', val: grand.reach, icon:'📈', color:'#00b894'},
+        {label:'การมีส่วนร่วมรวม', val: grand.engagement, icon:'🤝', color:'#fdcb6e'},
+        {label:'คลิกลิงก์รวม', val: grand.clicks, icon:'👆', color:'#e84393'},
+      ].map((s,i) => <Card key={i} hover style={{background:'linear-gradient(135deg,white,white)'}}>
+        <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12}}>
+          <div style={{width:48, height:48, borderRadius:14, background:s.color+'15', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22}}>{s.icon}</div>
+        </div>
+        <div style={{fontSize:12, color:T.gray, marginBottom:4}}>{s.label}</div>
+        <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>{fmt(s.val)}</div>
+      </Card>)}
+    </div>
+    
+    {/* Platform breakdown */}
+    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, marginBottom:24}}>
+      {PLATFORMS.map(p => <Card key={p.id} hover style={{padding:0, overflow:'hidden'}}>
+        <div style={{background: p.bg, padding:'16px 20px', color:'white'}}>
+          <div style={{display:'flex', alignItems:'center', gap:10}}>
+            <span style={{fontSize:24}}>{p.icon}</span>
+            <span style={{fontWeight:700, fontSize:15}}>{p.name}</span>
+          </div>
+        </div>
+        <div style={{padding:'16px 20px'}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+            {metrics.slice(0,4).map(m => <div key={m.id}>
+              <div style={{fontSize:10, color:T.lightGray}}>{m.icon} {m.name}</div>
+              <div style={{fontSize:16, fontWeight:700, color:T.dark}}>{fmt(totals[p.id]?.[m.id] || 0)}</div>
+            </div>)}
+          </div>
+        </div>
+      </Card>)}
+    </div>
+    
+    {/* Charts */}
+    <div style={{display:'grid', gridTemplateColumns:'2fr 1fr', gap:16, marginBottom:24}}>
+      <Card>
+        <div style={{fontWeight:700, fontSize:16, marginBottom:4}}>📈 แนวโน้ม 14 วันล่าสุด</div>
+        <div style={{fontSize:12, color:T.gray, marginBottom:16}}>Engagement รายวันของทุกแพลตฟอร์ม</div>
+        {trendData.length > 0 ? <ResponsiveContainer width="100%" height={280}>
+          <AreaChart data={trendData}>
+            <defs>{PLATFORMS.map(p => <linearGradient key={p.id} id={'g'+p.id} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={p.color} stopOpacity={0.3}/>
+              <stop offset="95%" stopColor={p.color} stopOpacity={0}/>
+            </linearGradient>)}</defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+            <XAxis dataKey="name" tick={{fontSize:11, fill:T.lightGray}}/>
+            <YAxis tick={{fontSize:11, fill:T.lightGray}} tickFormatter={v => v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}/>
+            <Tooltip formatter={v => fmt(v)}/>
+            {PLATFORMS.map(p => <Area key={p.id} type="monotone" dataKey={p.id} stroke={p.color} strokeWidth={2} fill={`url(#g${p.id})`} name={p.name}/>)}
+          </AreaChart>
+        </ResponsiveContainer> : <div style={{padding:60, textAlign:'center', color:T.lightGray}}>ยังไม่มีข้อมูล — เริ่มกรอกที่หน้า "กรอกข้อมูล"</div>}
+      </Card>
+      <Card>
+        <div style={{fontWeight:700, fontSize:16, marginBottom:4}}>🥧 สัดส่วน Engagement</div>
+        <div style={{fontSize:12, color:T.gray, marginBottom:16}}>แยกตามแพลตฟอร์ม</div>
+        {pieData.length > 0 ? <React.Fragment>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                {pieData.map((d,i) => <Cell key={i} fill={d.color}/>)}
+              </Pie>
+              <Tooltip formatter={v => fmt(v)}/>
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{marginTop:12}}>{pieData.map((d,i) => <div key={i} style={{display:'flex', alignItems:'center', gap:8, marginBottom:6, fontSize:12}}>
+            <div style={{width:10, height:10, borderRadius:'50%', background:d.color}}/>
+            <span style={{flex:1, color:T.gray}}>{d.name}</span>
+            <span style={{fontWeight:600}}>{fmt(d.value)}</span>
+          </div>)}</div>
+        </React.Fragment> : <div style={{padding:40, textAlign:'center', color:T.lightGray}}>ไม่มีข้อมูล</div>}
+      </Card>
+    </div>
+  </div>
+  </PageWrap>;
+};
 
-  const loadExisting = (plat, date) => {
-    const existing = entries.find(e => e.platform === plat && e.date === date);
+/* ═══ DATA ENTRY PAGE — with mini analytics dashboard on top ═══ */
+const DataPage = ({user, entries, setEntries, metrics, setMetrics, toast, reload}) => {
+  const [platform, setPlatform] = useState('facebook');
+  const [date, setDate] = useState(today());
+  const [period, setPeriod] = useState('daily');
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [showAddMetric, setShowAddMetric] = useState(false);
+  const [newMetric, setNewMetric] = useState({name:'', unit:'ครั้ง', icon:'📊'});
+  const [showHistory, setShowHistory] = useState(false);
+  const formRef = useRef(null);
+  
+  useEffect(() => {
+    const existing = entries.find(e => e.platform===platform && e.date===date && e.period===period);
     if (existing) {
-      const v = {};
-      metrics.forEach(m => { v[m.id] = existing[m.id] || ''; });
+      const v = {}; metrics.forEach(m => v[m.id] = existing.metrics?.[m.id] || '');
       setValues(v);
     } else {
-      const v = {};
-      metrics.forEach(m => { v[m.id] = ''; });
+      const v = {}; metrics.forEach(m => v[m.id] = '');
       setValues(v);
     }
-  };
-
-  useEffect(() => { loadExisting(selPlat, selDate); }, [selPlat, selDate, metrics]);
-
-  const saveData = async () => {
-    const entry = { date: selDate, platform: selPlat, ...values };
-    setEntries(prev => {
-      const idx = prev.findIndex(e => e.platform === selPlat && e.date === selDate);
-      if (idx >= 0) { const n = [...prev]; n[idx] = entry; return n; }
-      return [...prev, entry];
+  }, [platform, date, period, metrics, entries]);
+  
+  // Realtime analytics from current form
+  const currentTotal = useMemo(() => {
+    return Object.values(values).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  }, [values]);
+  
+  const previousEntry = useMemo(() => {
+    const prev = entries.filter(e => e.platform===platform && e.period===period && e.date < date)
+      .sort((a,b) => b.date.localeCompare(a.date))[0];
+    return prev;
+  }, [entries, platform, period, date]);
+  
+  const growthRates = useMemo(() => {
+    if (!previousEntry) return {};
+    const g = {};
+    metrics.forEach(m => {
+      const prev = Number(previousEntry.metrics?.[m.id]) || 0;
+      const curr = Number(values[m.id]) || 0;
+      if (prev > 0) g[m.id] = ((curr - prev) / prev * 100).toFixed(1);
     });
-    if (USE_SHEETS) await api.post({ action:'saveEntry', ...entry });
-    setSaved(true); setTimeout(() => setSaved(false), 2000);
+    return g;
+  }, [values, previousEntry, metrics]);
+  
+  const save = async () => {
+    setSaving(true);
+    const entry = { date, platform, period, metrics: {} };
+    metrics.forEach(m => { entry.metrics[m.id] = Number(values[m.id]) || 0; });
+    setEntries(prev => {
+      const idx = prev.findIndex(e => e.platform===platform && e.date===date && e.period===period);
+      const newEntry = { id: Date.now(), ...entry };
+      if (idx >= 0) { const n = [...prev]; n[idx] = {...n[idx], ...entry}; return n; }
+      return [...prev, newEntry];
+    });
+    if (USE_SHEETS) {
+      const res = await api.post({action:'saveEntry', ...entry, user: user.username});
+      if (res?.success) toast('บันทึกสำเร็จ!', 'success');
+      else toast('บันทึกไม่สำเร็จ: ' + (res?.error||'unknown'), 'error');
+    } else toast('บันทึกสำเร็จ (โหมด Demo)', 'info');
+    setSaving(false);
+    if (reload) reload();
   };
-
-  const addMetric = () => {
-    if (!newMetric.name) return;
+  
+  const addMetric = async () => {
+    if (!newMetric.name) { toast('กรอกชื่อตัวชี้วัด', 'error'); return; }
     const id = 'custom_' + Date.now();
-    setMetrics(prev => [...prev, { id, ...newMetric }]);
-    setNewMetric({name:'',unit:'ครั้ง',icon:'📊'});
-    setShowNew(false);
+    const m = { id, ...newMetric, isDefault: false };
+    setMetrics(prev => [...prev, m]);
+    if (USE_SHEETS) await api.post({action:'addMetric', ...m});
+    setNewMetric({name:'', unit:'ครั้ง', icon:'📊'});
+    setShowAddMetric(false);
+    toast('สร้างตัวชี้วัดใหม่แล้ว!', 'success');
   };
-
-  const delMetric = (id) => {
-    if (DEFAULT_METRICS.find(m=>m.id===id)) return;
+  
+  const delMetric = async (id) => {
     setMetrics(prev => prev.filter(m => m.id !== id));
+    if (USE_SHEETS) await api.post({action:'deleteMetric', id});
+    toast('ลบแล้ว', 'success');
   };
-
-  const historyData = useMemo(() => {
-    return entries.filter(e => e.platform === histPlat).sort((a,b) => b.date.localeCompare(a.date));
-  }, [entries, histPlat]);
-
-  return <div style={{padding:'24px 28px',maxWidth:1200}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}>
-      <div><div style={{fontSize:22,fontWeight:800}}>📝 กรอกข้อมูล</div><div style={{fontSize:13,color:'#b2bec3'}}>บันทึกข้อมูลตัวชี้วัดรายวัน และสร้างตัวชี้วัดใหม่</div></div>
-      <div style={{display:'flex',gap:8}}>
-        {['entry','history','metrics'].map(t=><button key={t} onClick={()=>setViewTab(t)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:viewTab===t?'#6c5ce7':'#f0f0f5',color:viewTab===t?'white':'#636e72',fontSize:13,cursor:'pointer',fontWeight:viewTab===t?600:400}}>{{entry:'กรอกข้อมูล',history:'ประวัติ',metrics:'ตัวชี้วัด'}[t]}</button>)}
+  
+  const scrollToForm = () => formRef.current?.scrollIntoView({behavior:'smooth', block:'start'});
+  const historyData = entries.filter(e => e.platform===platform).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20);
+  
+  return <PageWrap keyId="data">
+  <div style={{padding:'24px 28px', maxWidth:1200}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12}}>
+      <div>
+        <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>📝 กรอกข้อมูล</div>
+        <div style={{fontSize:13, color:T.gray, marginTop:4}}>บันทึกข้อมูลรายวัน/สัปดาห์/เดือน/ปี พร้อมวิเคราะห์แบบ Realtime</div>
+      </div>
+      <div style={{display:'flex', gap:8}}>
+        <Btn variant="ghost" onClick={()=>setShowHistory(true)} icon="📜">ประวัติ</Btn>
+        <Btn variant="outline" onClick={()=>setShowAddMetric(true)} icon="➕">ตัวชี้วัด</Btn>
       </div>
     </div>
-
-    {viewTab === 'entry' && <div style={S.card}>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
-        <div>
-          <label style={{fontSize:12,color:'#b2bec3',display:'block',marginBottom:4}}>แพลตฟอร์ม</label>
-          <select value={selPlat} onChange={e=>setSelPlat(e.target.value)} style={{...S.input}}>
-            {PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+    
+    {/* Realtime mini analytics */}
+    <Card style={{marginBottom:20, background:'linear-gradient(135deg,#f8f7ff,#fff)', border:'1px solid #e0dcff'}}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14}}>
+        <div style={{display:'flex', alignItems:'center', gap:10}}>
+          <div style={{width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, color:'white'}}>⚡</div>
+          <div>
+            <div style={{fontWeight:700, fontSize:15}}>Realtime Analytics</div>
+            <div style={{fontSize:11, color:T.gray}}>วิเคราะห์อัตโนมัติขณะกรอกข้อมูล</div>
+          </div>
         </div>
-        <div>
-          <label style={{fontSize:12,color:'#b2bec3',display:'block',marginBottom:4}}>วันที่</label>
-          <input type="date" value={selDate} onChange={e=>setSelDate(e.target.value)} style={S.input}/>
-        </div>
+        <Btn variant="primary" size="sm" onClick={scrollToForm} icon="⬇">ไปที่ฟอร์ม</Btn>
       </div>
-      <div style={{fontSize:14,fontWeight:600,color:'#6c5ce7',marginBottom:12}}>ตัวชี้วัด ({metrics.length} รายการ)</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:20}}>
-        {metrics.map(m=><div key={m.id}>
-          <label style={{fontSize:12,color:'#636e72',display:'block',marginBottom:4}}>{m.icon} {m.name} ({m.unit})</label>
-          <input type="number" value={values[m.id]||''} onChange={e=>setValues(prev=>({...prev,[m.id]:e.target.value}))} placeholder="0" style={{...S.input,border:'2px solid #6c5ce7',background:'#f8f7ff'}}/>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12}}>
+        {metrics.slice(0,6).map(m => {
+          const cur = Number(values[m.id]) || 0;
+          const g = growthRates[m.id];
+          return <div key={m.id} style={{background:'white', padding:'12px 14px', borderRadius:12, border:'1px solid '+T.border}}>
+            <div style={{fontSize:10, color:T.gray, marginBottom:4}}>{m.icon} {m.name}</div>
+            <div style={{fontSize:18, fontWeight:700, color:T.dark}}>{fmt(cur)}</div>
+            {g !== undefined && <div style={{fontSize:11, color: parseFloat(g) >= 0 ? T.success : T.danger, fontWeight:600}}>
+              {parseFloat(g) >= 0 ? '▲' : '▼'} {Math.abs(g)}% <span style={{color:T.lightGray, fontWeight:400}}>vs ก่อนหน้า</span>
+            </div>}
+          </div>;
+        })}
+      </div>
+    </Card>
+    
+    {/* Main form */}
+    <Card style={{marginBottom:20}}>
+      <div ref={formRef} style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, marginBottom:20}}>
+        <Select label="แพลตฟอร์ม" value={platform} onChange={e=>setPlatform(e.target.value)}
+          options={PLATFORMS.map(p => ({value:p.id, label: p.icon+' '+p.name}))}/>
+        <Input label="วันที่" type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+        <Select label="ช่วงเวลา" value={period} onChange={e=>setPeriod(e.target.value)}
+          options={[{value:'daily',label:'📅 รายวัน'},{value:'weekly',label:'📆 รายสัปดาห์'},{value:'monthly',label:'🗓️ รายเดือน'},{value:'yearly',label:'📊 รายปี'}]}/>
+      </div>
+      
+      <div style={{fontWeight:700, fontSize:14, color:T.primary, marginBottom:14, display:'flex', alignItems:'center', gap:6}}>
+        <span style={{width:4, height:16, background:T.primary, borderRadius:2}}></span>
+        ตัวชี้วัด ({metrics.length} รายการ)
+      </div>
+      
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:12, marginBottom:20}}>
+        {metrics.map(m => <div key={m.id}>
+          <label style={{fontSize:12, color:T.gray, marginBottom:6, display:'block', fontWeight:500}}>{m.icon} {m.name} <span style={{color:T.lightGray}}>({m.unit})</span></label>
+          <input type="number" value={values[m.id]||''} onChange={e=>setValues(p=>({...p, [m.id]:e.target.value}))} placeholder="0" style={{
+            width:'100%', padding:'12px 14px', borderRadius:10, border:'2px solid #e8e6ff',
+            fontSize:15, outline:'none', fontWeight:600, color:T.dark, boxSizing:'border-box',
+            background:'#f8f7ff', transition:'all 0.2s', fontFamily:'inherit'
+          }} onFocus={e=>{e.target.style.borderColor=T.primary; e.target.style.background='white';}}
+             onBlur={e=>{e.target.style.borderColor='#e8e6ff'; e.target.style.background='#f8f7ff';}}/>
         </div>)}
       </div>
-      {saved && <div style={{background:'#d4edda',color:'#155724',padding:'12px 20px',borderRadius:10,marginBottom:16,fontWeight:600,animation:'fadeInUp 0.3s'}}>✅ บันทึกข้อมูลวันที่ {selDate} สำเร็จ!</div>}
-      <button onClick={saveData} style={S.btn('linear-gradient(135deg,#6c5ce7,#a29bfe)')}>💾 บันทึกข้อมูล</button>
-    </div>}
-
-    {viewTab === 'history' && <div style={S.card}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontWeight:700,fontSize:16}}>📜 ประวัติการกรอกข้อมูล</div>
-        <select value={histPlat} onChange={e=>setHistPlat(e.target.value)} style={S.sel}>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      
+      <div style={{display:'flex', justifyContent:'flex-end', gap:8}}>
+        <Btn variant="ghost" onClick={()=>{const v={};metrics.forEach(m=>v[m.id]='');setValues(v);}}>ล้างค่า</Btn>
+        <Btn variant="primary" onClick={save} loading={saving} icon="💾">บันทึกข้อมูล</Btn>
       </div>
+    </Card>
+    
+    {/* Modals */}
+    <Modal open={showAddMetric} onClose={()=>setShowAddMetric(false)} title="✨ สร้างตัวชี้วัดใหม่"
+      footer={<React.Fragment>
+        <Btn variant="ghost" onClick={()=>setShowAddMetric(false)}>ยกเลิก</Btn>
+        <Btn variant="success" onClick={addMetric} icon="✓">สร้าง</Btn>
+      </React.Fragment>}>
+      <Input label="ชื่อตัวชี้วัด" value={newMetric.name} onChange={e=>setNewMetric(p=>({...p, name:e.target.value}))} placeholder="เช่น ยอดขาย, สมาชิกใหม่" icon="📝"/>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+        <Input label="หน่วย" value={newMetric.unit} onChange={e=>setNewMetric(p=>({...p, unit:e.target.value}))} placeholder="ครั้ง, คน, บาท"/>
+        <Input label="ไอคอน" value={newMetric.icon} onChange={e=>setNewMetric(p=>({...p, icon:e.target.value}))} placeholder="📊"/>
+      </div>
+      <div style={{fontSize:13, fontWeight:600, marginTop:20, marginBottom:8}}>ตัวชี้วัดที่มีอยู่</div>
+      <div style={{maxHeight:200, overflowY:'auto'}}>
+        {metrics.map(m => <div key={m.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderRadius:8, background:T.bg, marginBottom:4}}>
+          <div style={{fontSize:13}}>{m.icon} <strong>{m.name}</strong> <span style={{color:T.gray}}>({m.unit})</span></div>
+          {!m.isDefault ? <button onClick={()=>delMetric(m.id)} style={{background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14}}>🗑️</button> : <Badge color={T.gray}>ค่าเริ่มต้น</Badge>}
+        </div>)}
+      </div>
+    </Modal>
+    
+    <Modal open={showHistory} onClose={()=>setShowHistory(false)} title={`📜 ประวัติ ${PF(platform).name}`} width="800px">
       <div style={{overflow:'auto'}}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead><tr><th style={S.th}>วันที่</th>{metrics.map(m=><th key={m.id} style={S.th}>{m.icon} {m.name}</th>)}</tr></thead>
-          <tbody>{historyData.length>0 ? historyData.map((e,i)=><tr key={i}><td style={S.td}>{e.date}</td>{metrics.map(m=><td key={m.id} style={{...S.td,fontWeight:600}}>{fN(Number(e[m.id])||0)}</td>)}</tr>) : <tr><td colSpan={metrics.length+1} style={{...S.td,textAlign:'center',padding:40,color:'#b2bec3'}}>ยังไม่มีข้อมูล — ไปแท็บ "กรอกข้อมูล" เพื่อเริ่มบันทึก</td></tr>}</tbody>
+        <table style={{width:'100%', borderCollapse:'collapse'}}>
+          <thead><tr style={{background:T.bg}}><th style={{padding:'10px 12px', textAlign:'left', fontSize:12, color:T.gray}}>วันที่</th><th style={{padding:'10px 12px', textAlign:'left', fontSize:12, color:T.gray}}>ช่วง</th>{metrics.slice(0,4).map(m => <th key={m.id} style={{padding:'10px 12px', textAlign:'left', fontSize:12, color:T.gray}}>{m.icon} {m.name}</th>)}</tr></thead>
+          <tbody>{historyData.length > 0 ? historyData.map((e,i) => <tr key={i} style={{borderBottom:'1px solid '+T.border}}>
+            <td style={{padding:'10px 12px', fontSize:13, fontWeight:500}}>{e.date}</td>
+            <td style={{padding:'10px 12px', fontSize:12, color:T.gray}}>{e.period||'daily'}</td>
+            {metrics.slice(0,4).map(m => <td key={m.id} style={{padding:'10px 12px', fontSize:13, fontWeight:600}}>{fmt(Number(e.metrics?.[m.id])||0)}</td>)}
+          </tr>) : <tr><td colSpan={2+metrics.slice(0,4).length} style={{padding:40, textAlign:'center', color:T.lightGray}}>ยังไม่มีประวัติ</td></tr>}</tbody>
         </table>
       </div>
-    </div>}
+    </Modal>
+  </div>
+  </PageWrap>;
+};
 
-    {viewTab === 'metrics' && <div style={S.card}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div><div style={{fontWeight:700,fontSize:16}}>📐 จัดการตัวชี้วัด</div><div style={{fontSize:12,color:'#b2bec3'}}>สร้างตัวชี้วัดใหม่ เช่น ยอด Engagement, ผู้ติดตาม ฯลฯ</div></div>
-        <button onClick={()=>setShowNew(true)} style={S.btn('#6c5ce7')}>+ สร้างตัวชี้วัดใหม่</button>
+/* ═══ REPORTS PAGE — per platform with AI ═══ */
+const RepPage = ({user, entries, metrics, toast}) => {
+  const [platform, setPlatform] = useState('facebook');
+  const [showAI, setShowAI] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResp, setAiResp] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  
+  const platformEntries = entries.filter(e => e.platform === platform);
+  const sortedByDate = platformEntries.sort((a,b) => a.date.localeCompare(b.date)).slice(-30);
+  
+  const totals = useMemo(() => {
+    const t = {}; metrics.forEach(m => t[m.id] = 0);
+    platformEntries.forEach(e => metrics.forEach(m => t[m.id] += Number(e.metrics?.[m.id])||0));
+    return t;
+  }, [platformEntries, metrics]);
+  
+  const trendData = sortedByDate.map(e => {
+    const r = {name: e.date.slice(5)};
+    metrics.slice(0,4).forEach(m => r[m.id] = Number(e.metrics?.[m.id])||0);
+    return r;
+  });
+  
+  const pieData = metrics.slice(0,5).map((m,i) => ({
+    name: m.name, value: totals[m.id],
+    color: ['#6c5ce7','#00b894','#fdcb6e','#e17055','#0984e3'][i]
+  })).filter(d => d.value > 0);
+  
+  const askAI = async () => {
+    if (!aiPrompt) { toast('กรอกคำถาม', 'error'); return; }
+    setAiLoading(true);
+    const context = `ข้อมูลของ ${PF(platform).name}:\nยอดรวม: ${JSON.stringify(totals)}\nจำนวนบันทึกทั้งหมด: ${platformEntries.length}\nกรอบเวลาล่าสุด 30 วัน`;
+    const resp = await askGemini(aiPrompt, context);
+    setAiResp(resp);
+    setAiLoading(false);
+    if (USE_SHEETS) await api.post({action:'saveAIHistory', user:user.username, prompt:aiPrompt, response:resp});
+  };
+  
+  const p = PF(platform);
+  
+  return <PageWrap keyId="reports">
+  <div style={{padding:'24px 28px', maxWidth:1400}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12}}>
+      <div>
+        <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>📊 รายงานรายละเอียด</div>
+        <div style={{fontSize:13, color:T.gray, marginTop:4}}>วิเคราะห์แต่ละแพลตฟอร์มโดยละเอียด</div>
       </div>
-      {showNewMetric && <div style={{background:'#f8f7ff',borderRadius:12,padding:16,marginBottom:16,animation:'fadeInUp 0.3s'}}>
-        <div style={{fontWeight:600,marginBottom:12}}>✨ สร้างตัวชี้วัดใหม่</div>
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}}>
-          <div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>ชื่อตัวชี้วัด</label><input value={newMetric.name} onChange={e=>setNewMetric(p=>({...p,name:e.target.value}))} style={S.input} placeholder="เช่น ยอดขาย, จำนวนสมาชิก..."/></div>
-          <div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>หน่วย</label><input value={newMetric.unit} onChange={e=>setNewMetric(p=>({...p,unit:e.target.value}))} style={S.input} placeholder="ครั้ง, คน, บาท..."/></div>
-          <div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>ไอคอน</label><input value={newMetric.icon} onChange={e=>setNewMetric(p=>({...p,icon:e.target.value}))} style={S.input} placeholder="📊"/></div>
+      <Btn variant="primary" onClick={()=>{setShowAI(true); setAiResp('');}} icon="🤖">วิเคราะห์ด้วย AI</Btn>
+    </div>
+    
+    {/* Platform tabs */}
+    <div style={{display:'flex', gap:8, marginBottom:20, flexWrap:'wrap'}}>
+      {PLATFORMS.map(pl => {
+        const active = platform === pl.id;
+        return <button key={pl.id} onClick={()=>setPlatform(pl.id)} style={{
+          padding:'12px 20px', borderRadius:12, border:'none',
+          background: active ? pl.bg : 'white',
+          color: active ? 'white' : T.gray,
+          fontSize:14, fontWeight: active?700:500, cursor:'pointer', fontFamily:'inherit',
+          display:'flex', alignItems:'center', gap:8,
+          boxShadow: active ? '0 8px 20px rgba(0,0,0,0.15)' : '0 2px 8px rgba(0,0,0,0.04)',
+          transition:'all 0.25s cubic-bezier(0.4,0,0.2,1)',
+          transform: active ? 'translateY(-2px)' : 'none'
+        }}>
+          <span style={{fontSize:18}}>{pl.icon}</span>{pl.name}
+        </button>;
+      })}
+    </div>
+    
+    {/* Platform header */}
+    <Card style={{padding:0, overflow:'hidden', marginBottom:20}}>
+      <div style={{background: p.bg, padding:'24px 28px', color:'white'}}>
+        <div style={{display:'flex', alignItems:'center', gap:16}}>
+          <div style={{fontSize:48}}>{p.icon}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:24, fontWeight:800}}>{p.name}</div>
+            <div style={{fontSize:13, opacity:0.9, marginTop:2}}>ข้อมูลทั้งหมด {platformEntries.length} บันทึก</div>
+          </div>
         </div>
-        <div style={{display:'flex',gap:8}}><button onClick={addMetric} style={S.btn('#00b894')}>✅ เพิ่ม</button><button onClick={()=>setShowNew(false)} style={S.btnO('#636e72')}>ยกเลิก</button></div>
-      </div>}
-      <div style={{display:'grid',gap:8}}>
-        {metrics.map(m => <div key={m.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderRadius:10,border:'1px solid #f0f0f5'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>{m.icon}</span><div><div style={{fontWeight:600,fontSize:14}}>{m.name}</div><div style={{fontSize:11,color:'#b2bec3'}}>หน่วย: {m.unit} · ID: {m.id}</div></div></div>
-          {!DEFAULT_METRICS.find(x=>x.id===m.id) ? <button onClick={()=>delMetric(m.id)} style={S.btnO('#e17055')}>🗑️ ลบ</button> : <span style={S.badge('#f0f0f5','#b2bec3')}>ค่าเริ่มต้น</span>}
+      </div>
+      <div style={{padding:'20px 28px', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:16}}>
+        {metrics.slice(0,6).map(m => <div key={m.id}>
+          <div style={{fontSize:11, color:T.gray, marginBottom:4}}>{m.icon} {m.name}</div>
+          <div style={{fontSize:22, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>{fmt(totals[m.id])}</div>
         </div>)}
       </div>
-    </div>}
-  </div>;
+    </Card>
+    
+    {/* Charts */}
+    <div style={{display:'grid', gridTemplateColumns:'2fr 1fr', gap:16, marginBottom:20}}>
+      <Card>
+        <div style={{fontWeight:700, fontSize:16, marginBottom:16}}>📈 แนวโน้ม 30 วันล่าสุด</div>
+        {trendData.length > 0 ? <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={trendData}>
+            <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+            <XAxis dataKey="name" tick={{fontSize:11, fill:T.lightGray}}/>
+            <YAxis tick={{fontSize:11, fill:T.lightGray}} tickFormatter={v => v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}/>
+            <Tooltip formatter={v => fmt(v)}/>
+            <Legend wrapperStyle={{fontSize:12}}/>
+            {metrics.slice(0,4).map((m,i) => <Bar key={m.id} dataKey={m.id} fill={['#6c5ce7','#00b894','#fdcb6e','#e17055'][i]} name={m.name} radius={[4,4,0,0]}/>)}
+          </BarChart>
+        </ResponsiveContainer> : <div style={{padding:60, textAlign:'center', color:T.lightGray}}>ยังไม่มีข้อมูล</div>}
+      </Card>
+      <Card>
+        <div style={{fontWeight:700, fontSize:16, marginBottom:16}}>🥧 สัดส่วนตัวชี้วัด</div>
+        {pieData.length > 0 ? <ResponsiveContainer width="100%" height={280}>
+          <PieChart>
+            <Pie data={pieData} dataKey="value" cx="50%" cy="45%" outerRadius={80} label={({name})=>name}>
+              {pieData.map((d,i) => <Cell key={i} fill={d.color}/>)}
+            </Pie>
+            <Tooltip formatter={v => fmt(v)}/>
+          </PieChart>
+        </ResponsiveContainer> : <div style={{padding:60, textAlign:'center', color:T.lightGray}}>ไม่มีข้อมูล</div>}
+      </Card>
+    </div>
+    
+    {/* AI Modal */}
+    <Modal open={showAI} onClose={()=>setShowAI(false)} title={`🤖 วิเคราะห์ด้วย AI — ${p.name}`} width="700px">
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:13, color:T.gray, marginBottom:8}}>💡 ตัวอย่างคำถาม:</div>
+        <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12}}>
+          {['วิเคราะห์การเติบโต', 'แนะนำวิธีเพิ่มยอด engagement', 'จุดแข็งจุดอ่อน', 'ทำนายแนวโน้ม 3 เดือนข้างหน้า', 'เปรียบเทียบกับคู่แข่ง'].map(q => <button key={q} onClick={()=>setAiPrompt(q)} style={{padding:'6px 12px', borderRadius:16, border:'1px solid '+T.border, background:'white', fontSize:12, cursor:'pointer', color:T.gray, fontFamily:'inherit'}}>{q}</button>)}
+        </div>
+      </div>
+      <Textarea label="คำถาม / คำสั่ง" value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="ตัวอย่าง: วิเคราะห์แนวโน้ม engagement และแนะนำวิธีเพิ่มยอด..." rows={3}/>
+      <div style={{display:'flex', justifyContent:'flex-end', marginBottom:16}}>
+        <Btn variant="primary" onClick={askAI} loading={aiLoading} icon="✨">ให้ AI วิเคราะห์</Btn>
+      </div>
+      {aiResp && <div style={{padding:20, borderRadius:12, background:'linear-gradient(135deg,#f8f7ff,#fff)', border:'1px solid #e0dcff', animation:'fadeSlideIn 0.4s'}}>
+        <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:12}}>
+          <div style={{width:32, height:32, borderRadius:10, background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16}}>🤖</div>
+          <div style={{fontWeight:700, fontSize:14}}>Gemini AI</div>
+        </div>
+        <div style={{fontSize:13, lineHeight:1.7, whiteSpace:'pre-wrap', color:T.dark}}>{aiResp}</div>
+      </div>}
+      {!USE_GEMINI && <div style={{padding:12, borderRadius:8, background:'#fff8e1', border:'1px solid #ffc107', fontSize:12, color:'#856404', marginTop:12}}>⚠️ ตั้งค่า GEMINI_API_KEY ในโค้ดก่อน ดูวิธีการที่ด้านบนของไฟล์</div>}
+    </Modal>
+  </div>
+  </PageWrap>;
 };
 
-/* ═══ PAGE: REPORTS ═══ */
-const RepPage = ({entries, metrics}) => {
-  const [pf,sPf]=useState('all');const [tab,sTab]=useState('table');
-  const filtered = pf==='all' ? entries : entries.filter(e=>e.platform===pf);
-  const exportCSV = () => {
-    let csv = 'วันที่,แพลตฟอร์ม,' + metrics.map(m=>m.name).join(',') + '\n';
-    filtered.forEach(e => { csv += e.date + ',' + (PF(e.platform).name) + ',' + metrics.map(m=>e[m.id]||0).join(',') + '\n'; });
-    const b = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='SocialPulse_Report.csv';a.click();
+/* ═══ CONTENT PAGE — with image, popup, engagement ═══ */
+const ConPage = ({user, contents, setContents, toast}) => {
+  const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [showModal, setShowModal] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [viewingContent, setViewingContent] = useState(null);
+  const [form, setForm] = useState({title:'', platform:'facebook', type:'article', status:'draft', date:today(), description:'', imageUrl:'', link:'', engagement:0, reach:0});
+  
+  const filtered = contents.filter(c =>
+    (filter==='all' || c.platform===filter) && (statusFilter==='all' || c.status===statusFilter)
+  );
+  
+  const openNew = () => {
+    setEditId(null);
+    setForm({title:'', platform:'facebook', type:'article', status:'draft', date:today(), description:'', imageUrl:'', link:'', engagement:0, reach:0});
+    setShowModal(true);
   };
-  const summaryByPlat = useMemo(()=>{
-    const r={};PLATFORMS.forEach(p=>{r[p.id]={};metrics.forEach(m=>{r[p.id][m.id]=0;});});
-    filtered.forEach(e=>{if(r[e.platform])metrics.forEach(m=>{r[e.platform][m.id]+=(Number(e[m.id])||0);});});
-    return r;
-  },[filtered,metrics]);
-
-  return <div style={{padding:'24px 28px',maxWidth:1400}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24,flexWrap:'wrap',gap:12}}>
-      <div><div style={{fontSize:22,fontWeight:800}}>📊 รายงาน</div><div style={{fontSize:13,color:'#b2bec3'}}>สรุปผลดำเนินงาน พร้อม Export</div></div>
-      <div style={{display:'flex',gap:8}}><select value={pf} onChange={e=>sPf(e.target.value)} style={S.sel}><option value="all">ทุกแพลตฟอร์ม</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button onClick={exportCSV} style={S.btn('#6c5ce7')}>📥 Export CSV</button></div>
-    </div>
-    <div style={{display:'flex',gap:8,marginBottom:20}}>{[{id:'table',l:'ตาราง'},{id:'chart',l:'กราฟ'}].map(t=><button key={t.id} onClick={()=>sTab(t.id)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:tab===t.id?'#6c5ce7':'#f0f0f5',color:tab===t.id?'white':'#636e72',fontSize:13,cursor:'pointer',fontWeight:tab===t.id?600:400}}>{t.l}</button>)}</div>
-    {tab==='table' && <div style={{...S.card,padding:0,overflow:'auto'}}>
-      <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr><th style={S.th}>แพลตฟอร์ม</th>{metrics.map(m=><th key={m.id} style={S.th}>{m.icon} {m.name}</th>)}</tr></thead>
-        <tbody>{PLATFORMS.filter(p=>pf==='all'||p.id===pf).map(p=><tr key={p.id}><td style={S.td}><div style={{display:'flex',alignItems:'center',gap:8}}><div style={S.pI(p.color)}>{p.icon}</div>{p.name}</div></td>{metrics.map(m=><td key={m.id} style={{...S.td,fontWeight:600}}>{fN(summaryByPlat[p.id]?.[m.id]||0)}</td>)}</tr>)}</tbody>
-      </table>
-    </div>}
-    {tab==='chart' && <div style={S.card}>
-      <div style={{fontWeight:700,marginBottom:16}}>เปรียบเทียบแพลตฟอร์ม — {metrics[0]?.name || 'ผู้ติดตาม'}</div>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={PLATFORMS.filter(p=>pf==='all'||p.id===pf).map(p=>({name:p.name,value:summaryByPlat[p.id]?.[metrics[0]?.id]||0}))} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3"/><XAxis type="number" tickFormatter={v=>fN(v)}/><YAxis type="category" dataKey="name" width={100} tick={{fontSize:12}}/>
-          <Tooltip formatter={v=>fN(v)}/><Bar dataKey="value" fill="#6c5ce7" radius={[0,4,4,0]}/>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>}
-  </div>;
-};
-
-/* ═══ PAGE: CONTENT ═══ */
-const INIT_CONTENT=[{id:1,title:'5 เทคนิคเพิ่มยอดขาย',platform:'facebook',status:'published',date:'2024-05-28',type:'article',desc:'บทความ'},{id:2,title:'รีวิวสินค้าใหม่',platform:'instagram',status:'published',date:'2024-05-26',type:'reels',desc:'Reels'},{id:3,title:'เบื้องหลังทีมงาน',platform:'tiktok',status:'published',date:'2024-05-25',type:'video',desc:'Video'},{id:4,title:'Flash Sale โปรโมชั่น',platform:'line',status:'scheduled',date:'2024-06-02',type:'broadcast',desc:'Broadcast'},{id:5,title:'Q&A ถามตอบ',platform:'twitter',status:'draft',date:'2024-06-05',type:'thread',desc:'Thread'}];
-const ConPage = () => {
-  const [items,sI]=useState(INIT_CONTENT);const [fl,sFl]=useState('all');const [sf,sSf]=useState('all');const [show,sSh]=useState(false);const [eId,sEId]=useState(null);const [fm,sFm]=useState({title:'',platform:'facebook',status:'draft',type:'article',desc:'',date:today()});
-  const fd=items.filter(c=>(fl==='all'||c.platform===fl)&&(sf==='all'||c.status===sf));
-  const openN=()=>{sEId(null);sFm({title:'',platform:'facebook',status:'draft',type:'article',desc:'',date:today()});sSh(true);};
-  const openE=c=>{sEId(c.id);sFm({title:c.title,platform:c.platform,status:c.status,type:c.type,desc:c.desc,date:c.date});sSh(true);};
-  const save=()=>{if(!fm.title)return;if(eId)sI(pr=>pr.map(c=>c.id===eId?{...c,...fm}:c));else sI(pr=>[{id:Date.now(),...fm},...pr]);sSh(false);};
-  return <div style={{padding:'24px 28px',maxWidth:1400}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}><div><div style={{fontSize:22,fontWeight:800}}>📋 คอนเทนต์</div></div><button onClick={openN} style={S.btn('linear-gradient(135deg,#6c5ce7,#a29bfe)')}>+ สร้างใหม่</button></div>
-    {show && <div style={{...S.card,marginBottom:20,animation:'fadeInUp 0.3s'}}><div style={{fontWeight:700,marginBottom:16}}>{eId?'✏️ แก้ไข':'✨ สร้างใหม่'}</div><div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}}><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>หัวข้อ</label><input value={fm.title} onChange={e=>sFm(p=>({...p,title:e.target.value}))} style={S.input}/></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>แพลตฟอร์ม</label><select value={fm.platform} onChange={e=>sFm(p=>({...p,platform:e.target.value}))} style={S.input}>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>สถานะ</label><select value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))} style={S.input}><option value="draft">ร่าง</option><option value="scheduled">นัดเวลา</option><option value="published">เผยแพร่</option></select></div></div><div style={{display:'flex',gap:8}}><button onClick={save} style={S.btn('#00b894')}>💾 บันทึก</button><button onClick={()=>sSh(false)} style={S.btnO('#636e72')}>ยกเลิก</button></div></div>}
-    <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}><select value={fl} onChange={e=>sFl(e.target.value)} style={S.sel}><option value="all">ทุกแพลตฟอร์ม</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>{['all','published','scheduled','draft'].map(s=><button key={s} onClick={()=>sSf(s)} style={{padding:'6px 14px',borderRadius:8,border:'none',background:sf===s?'#6c5ce7':'#f0f0f5',color:sf===s?'white':'#636e72',fontSize:12,cursor:'pointer'}}>{s==='all'?'ทั้งหมด':s==='published'?'เผยแพร่':s==='scheduled'?'นัดเวลา':'ร่าง'}</button>)}</div>
-    <div style={{...S.card,padding:0,overflow:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['หัวข้อ','ช่องทาง','ประเภท','วันที่','สถานะ','จัดการ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead><tbody>{fd.map(c=>{const p=PF(c.platform);return<tr key={c.id}><td style={S.td}><div style={{fontWeight:600}}>{c.title}</div></td><td style={S.td}><div style={{display:'flex',alignItems:'center',gap:6}}><div style={S.pI(p.color)}>{p.icon}</div>{p.name}</div></td><td style={S.td}>{c.type}</td><td style={S.td}>{c.date}</td><td style={S.td}><SB s={c.status}/></td><td style={S.td}><div style={{display:'flex',gap:4}}><button onClick={()=>openE(c)} style={{...S.btnO('#6c5ce7'),padding:'4px 10px',fontSize:11}}>✏️</button><button onClick={()=>sI(pr=>pr.filter(x=>x.id!==c.id))} style={{...S.btnO('#e17055'),padding:'4px 10px',fontSize:11}}>🗑️</button></div></td></tr>})}</tbody></table>{fd.length===0 && <div style={{textAlign:'center',padding:40,color:'#b2bec3'}}>ไม่พบคอนเทนต์</div>}</div>
-  </div>;
-};
-
-/* ═══ PAGE: MESSAGES ═══ */
-const INIT_MSGS=[{id:1,platform:'facebook',name:'คุณวิชัย',avatar:'ว',msg:'สนใจสินค้าครับ ราคาเท่าไหร่?',time:'10:32',unread:true,msgs:[{from:'user',text:'สนใจสินค้าครับ ราคาเท่าไหร่?',time:'10:32'}]},{id:2,platform:'instagram',name:'น้องแพร',avatar:'แ',msg:'อยากได้สีชมพูค่ะ',time:'09:15',unread:true,msgs:[{from:'user',text:'อยากได้สีชมพูค่ะ มีไหมคะ?',time:'09:15'}]},{id:3,platform:'line',name:'คุณสมหมาย',avatar:'ส',msg:'สั่งซื้อไปแล้วครับ',time:'เมื่อวาน',unread:false,msgs:[{from:'user',text:'สั่งซื้อไปแล้ว ORD-0531',time:'14:20'},{from:'me',text:'ได้รับออเดอร์แล้วครับ จัดส่ง 1-2 วัน',time:'14:35'}]},{id:4,platform:'tiktok',name:'BossGamer99',avatar:'B',msg:'Collab กันไหมครับ',time:'2 วันก่อน',unread:true,msgs:[{from:'user',text:'สนใจ Collab กันไหม มีผู้ติดตาม 50K',time:'11:00'}]}];
-const MsgPage = () => {
-  const [msgs,sM]=useState(INIT_MSGS);const [sel,sS]=useState(null);const [reply,sR]=useState('');const [fl,sFl]=useState('all');
-  const fd=msgs.filter(m=>fl==='all'||m.platform===fl);const sm=msgs.find(m=>m.id===sel);
-  const send=()=>{if(!reply.trim()||!sel)return;sM(pr=>pr.map(m=>m.id===sel?{...m,msgs:[...m.msgs,{from:'me',text:reply,time:new Date().toLocaleTimeString('th',{hour:'2-digit',minute:'2-digit'})}],msg:reply,unread:false}:m));sR('');};
-  return <div style={{padding:'24px 28px',maxWidth:1400}}>
-    <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>💬 ข้อความ</div>
-    <div style={{fontSize:13,color:'#b2bec3',marginBottom:20}}>ข้อความจากทุกช่องทาง {msgs.filter(m=>m.unread).length>0 && <span style={S.badge('#e17055','white')}>{msgs.filter(m=>m.unread).length} ใหม่</span>}</div>
-    <div style={{display:'grid',gridTemplateColumns:'340px 1fr',gap:16,height:'calc(100vh - 200px)',minHeight:400}}>
-      <div style={{...S.card,padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div style={{padding:'10px 12px',borderBottom:'1px solid #f0f0f5',display:'flex',gap:4}}>{['all','facebook','instagram','tiktok','line','twitter'].map(f=><button key={f} onClick={()=>sFl(f)} style={{padding:'4px 8px',borderRadius:6,border:'none',background:fl===f?'#6c5ce7':'#f0f0f5',color:fl===f?'white':'#636e72',fontSize:11,cursor:'pointer'}}>{f==='all'?'ทั้งหมด':PF(f).icon}</button>)}</div>
-        <div style={{flex:1,overflowY:'auto'}}>{fd.map(m=>{const p=PF(m.platform);return <div key={m.id} onClick={()=>{sS(m.id);sM(pr=>pr.map(x=>x.id===m.id?{...x,unread:false}:x));}} style={{padding:'12px 14px',borderBottom:'1px solid #f5f5f8',cursor:'pointer',background:sel===m.id?'#f8f7ff':m.unread?'#fffbf0':'white',display:'flex',gap:10}}>
-          <div style={{width:40,height:40,borderRadius:'50%',background:p.color+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:p.color,flexShrink:0}}>{m.avatar}</div>
-          <div style={{flex:1,minWidth:0}}><div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:m.unread?700:500,fontSize:14}}>{m.name}</span><span style={{fontSize:11,color:'#b2bec3'}}>{m.time}</span></div><div style={{fontSize:12,color:'#636e72',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.msg}</div></div>
-          {m.unread && <div style={{width:8,height:8,borderRadius:'50%',background:'#6c5ce7',flexShrink:0,marginTop:6}}/>}
-        </div>})}</div>
+  const openEdit = c => {
+    setEditId(c.id);
+    setForm({title:c.title, platform:c.platform, type:c.type, status:c.status, date:c.date, description:c.description||'', imageUrl:c.imageUrl||'', link:c.link||'', engagement:c.engagement||0, reach:c.reach||0});
+    setShowModal(true);
+  };
+  const save = async () => {
+    if (!form.title) { toast('กรอกหัวข้อ', 'error'); return; }
+    const item = { ...form, id: editId, user: user.username, createdAt: new Date().toISOString(), createdBy: user.username };
+    if (editId) setContents(prev => prev.map(c => c.id === editId ? {...c, ...item} : c));
+    else setContents(prev => [{...item, id: Date.now()}, ...prev]);
+    if (USE_SHEETS) await api.post({action:'saveContent', ...item});
+    setShowModal(false);
+    toast(editId?'แก้ไขสำเร็จ':'สร้างสำเร็จ', 'success');
+  };
+  const del = async (id) => {
+    setContents(prev => prev.filter(c => c.id !== id));
+    if (USE_SHEETS) await api.post({action:'deleteContent', id});
+    toast('ลบแล้ว', 'success');
+  };
+  
+  return <PageWrap keyId="content">
+  <div style={{padding:'24px 28px', maxWidth:1400}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12}}>
+      <div>
+        <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>📋 คอนเทนต์</div>
+        <div style={{fontSize:13, color:T.gray, marginTop:4}}>จัดการคอนเทนต์ทั้งหมด แนบรูป ลิงก์ และดูยอด engagement</div>
       </div>
-      <div style={{...S.card,padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        {sm ? <React.Fragment>
-          <div style={{padding:'12px 16px',borderBottom:'1px solid #f0f0f5',display:'flex',alignItems:'center',gap:10}}><div style={{width:36,height:36,borderRadius:'50%',background:PF(sm.platform).color+'20',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:PF(sm.platform).color}}>{sm.avatar}</div><div><div style={{fontWeight:600}}>{sm.name}</div><div style={{fontSize:11,color:'#b2bec3'}}>{PF(sm.platform).name}</div></div></div>
-          <div style={{flex:1,overflowY:'auto',padding:16,display:'flex',flexDirection:'column',gap:8}}>{sm.msgs.map((m,i)=><div key={i} style={{display:'flex',justifyContent:m.from==='me'?'flex-end':'flex-start'}}><div style={{maxWidth:'70%',padding:'10px 14px',borderRadius:m.from==='me'?'14px 14px 4px 14px':'14px 14px 14px 4px',background:m.from==='me'?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'#f0f0f5',color:m.from==='me'?'white':'#2d3436',fontSize:13}}>{m.text}<div style={{fontSize:10,marginTop:4,opacity:0.6,textAlign:'right'}}>{m.time}</div></div></div>)}</div>
-          <div style={{padding:'12px 16px',borderTop:'1px solid #f0f0f5',display:'flex',gap:8}}><input value={reply} onChange={e=>sR(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')send();}} placeholder="พิมพ์ข้อความ..." style={{...S.input,flex:1}}/><button onClick={send} style={S.btn('#6c5ce7')}>ส่ง</button></div>
-        </React.Fragment> : <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#b2bec3'}}><div style={{textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>💬</div>เลือกข้อความเพื่อเริ่มสนทนา</div></div>}
-      </div>
+      <Btn variant="primary" onClick={openNew} icon="➕">สร้างคอนเทนต์</Btn>
     </div>
-  </div>;
-};
-
-/* ═══ PAGE: ADS ═══ */
-const INIT_CAMPS=[{id:1,name:'Summer Sale',platform:'facebook',status:'active',budget:15000,spent:8750,clicks:3200,conversions:89},{id:2,name:'Brand Awareness',platform:'instagram',status:'active',budget:20000,spent:12300,clicks:5600,conversions:120},{id:3,name:'TikTok Viral',platform:'tiktok',status:'paused',budget:10000,spent:6800,clicks:12000,conversions:200}];
-const AdsPage = () => {
-  const [camps,sC]=useState(INIT_CAMPS);const [show,sSh]=useState(false);const [eId,sEId]=useState(null);const [fm,sFm]=useState({name:'',platform:'facebook',budget:5000});
-  const openN=()=>{sEId(null);sFm({name:'',platform:'facebook',budget:5000});sSh(true);};
-  const openE=c=>{sEId(c.id);sFm({name:c.name,platform:c.platform,budget:c.budget});sSh(true);};
-  const save=()=>{if(!fm.name)return;if(eId)sC(pr=>pr.map(c=>c.id===eId?{...c,...fm}:c));else sC(pr=>[{id:Date.now(),status:'active',spent:0,clicks:0,conversions:0,...fm},...pr]);sSh(false);};
-  return <div style={{padding:'24px 28px',maxWidth:1400}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}><div><div style={{fontSize:22,fontWeight:800}}>📢 โฆษณา</div></div><button onClick={openN} style={S.btn('linear-gradient(135deg,#6c5ce7,#a29bfe)')}>+ สร้างแคมเปญ</button></div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,marginBottom:20}}>{[{l:'งบรวม',v:'฿'+fN(camps.reduce((s,c)=>s+c.budget,0)),i:'💰',c:'#6c5ce7'},{l:'ใช้ไป',v:'฿'+fN(camps.reduce((s,c)=>s+c.spent,0)),i:'📊',c:'#e84393'},{l:'Conversions',v:fN(camps.reduce((s,c)=>s+c.conversions,0)),i:'🎯',c:'#00b894'}].map((s,i)=><div key={i} style={{...S.card,padding:'16px 20px',display:'flex',alignItems:'center',gap:12}}><div style={{width:40,height:40,borderRadius:10,background:s.c+'15',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{s.i}</div><div><div style={{fontSize:11,color:'#b2bec3'}}>{s.l}</div><div style={{fontSize:20,fontWeight:800}}>{s.v}</div></div></div>)}</div>
-    {show && <div style={{...S.card,marginBottom:20,animation:'fadeInUp 0.3s'}}><div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}}><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>ชื่อแคมเปญ</label><input value={fm.name} onChange={e=>sFm(p=>({...p,name:e.target.value}))} style={S.input}/></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>แพลตฟอร์ม</label><select value={fm.platform} onChange={e=>sFm(p=>({...p,platform:e.target.value}))} style={S.input}>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div><div><label style={{fontSize:11,color:'#b2bec3',display:'block',marginBottom:4}}>งบ (฿)</label><input type="number" value={fm.budget} onChange={e=>sFm(p=>({...p,budget:+e.target.value}))} style={S.input}/></div></div><div style={{display:'flex',gap:8}}><button onClick={save} style={S.btn('#00b894')}>💾 บันทึก</button><button onClick={()=>sSh(false)} style={S.btnO('#636e72')}>ยกเลิก</button></div></div>}
-    <div style={{...S.card,padding:0,overflow:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['แคมเปญ','ช่อง','สถานะ','งบ','ใช้ไป','คลิก','Conv.','จัดการ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead><tbody>{camps.map(c=>{const p=PF(c.platform);const pct=c.budget?Math.round(c.spent/c.budget*100):0;return<tr key={c.id}><td style={{...S.td,fontWeight:600}}>{c.name}</td><td style={S.td}><div style={S.pI(p.color)}>{p.icon}</div></td><td style={S.td}><SB s={c.status}/></td><td style={S.td}>฿{fN(c.budget)}</td><td style={S.td}><div>฿{fN(c.spent)}</div><div style={{width:'100%',height:4,background:'#f0f0f5',borderRadius:2,marginTop:4}}><div style={{width:pct+'%',height:'100%',background:pct>80?'#e17055':'#00b894',borderRadius:2}}/></div></td><td style={{...S.td,fontWeight:600}}>{fN(c.clicks)}</td><td style={{...S.td,color:'#00b894',fontWeight:600}}>{c.conversions}</td><td style={S.td}><div style={{display:'flex',gap:4}}><button onClick={()=>sC(pr=>pr.map(x=>x.id===c.id?{...x,status:x.status==='active'?'paused':'active'}:x))} style={{...S.btnO(c.status==='active'?'#fdcb6e':'#00b894'),padding:'4px 8px',fontSize:11}}>{c.status==='active'?'⏸':'▶'}</button><button onClick={()=>openE(c)} style={{...S.btnO('#6c5ce7'),padding:'4px 8px',fontSize:11}}>✏️</button><button onClick={()=>sC(pr=>pr.filter(x=>x.id!==c.id))} style={{...S.btnO('#e17055'),padding:'4px 8px',fontSize:11}}>🗑️</button></div></td></tr>})}</tbody></table></div>
-  </div>;
-};
-
-/* ═══ PAGE: AI ANALYTICS ═══ */
-const AIPage = ({entries, metrics}) => {
-  const [ld,sLd]=useState(true);useEffect(()=>{setTimeout(()=>sLd(false),1200);},[]);
-  const sd=[{name:'เชิงบวก',value:68,color:'#00b894'},{name:'เป็นกลาง',value:22,color:'#fdcb6e'},{name:'เชิงลบ',value:10,color:'#e17055'}];
-  const rd=[{subject:'เข้าถึง',A:85,B:70},{subject:'ส่วนร่วม',A:78,B:65},{subject:'เติบโต',A:90,B:55},{subject:'คอนเทนต์',A:72,B:80},{subject:'Sentiment',A:88,B:60},{subject:'ROI',A:65,B:75}];
-  const ins=[{icon:'🔥',title:'TikTok เติบโตเร็วสุด',desc:'ควรเพิ่มงบและทรัพยากร',p:'สูง',c:'#e17055'},{icon:'📈',title:'Engagement IG ดีขึ้น',desc:'Reels มี Engagement สูงกว่า 3.5 เท่า',p:'สูง',c:'#E4405F'},{icon:'⏰',title:'ช่วงทอง: 18-21 น.',desc:'โพสต์ช่วงนี้เข้าถึงสูง 45%',p:'กลาง',c:'#fdcb6e'},{icon:'💬',title:'LINE Broadcast ตอบรับดี',desc:'เปิดอ่าน 78% สูงกว่าค่าเฉลี่ย',p:'กลาง',c:'#06C755'},{icon:'🎯',title:'วิดีโอได้ผลดีสุด',desc:'Eng Rate 14.08% สูงกว่า Static 4x',p:'สูง',c:'#6c5ce7'}];
-  if(ld)return<div style={{padding:'24px 28px',display:'flex',alignItems:'center',justifyContent:'center',minHeight:400}}><div style={{textAlign:'center'}}><div style={{width:50,height:50,border:'4px solid #f0f0f5',borderTopColor:'#6c5ce7',borderRadius:'50%',animation:'spin 1s linear infinite',margin:'0 auto 16px'}}/><div style={{color:'#636e72'}}>🤖 AI กำลังวิเคราะห์...</div></div><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
-  return <div style={{padding:'24px 28px',maxWidth:1400}}>
-    <div style={{fontSize:22,fontWeight:800,marginBottom:20}}>🤖 AI วิเคราะห์</div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(350px,1fr))',gap:16,marginBottom:24}}>{ins.map((i,j)=><div key={j} style={{...S.card,padding:16,borderLeft:'4px solid '+i.c,display:'flex',gap:12}}><div style={{fontSize:28}}>{i.icon}</div><div style={{flex:1}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}><div style={{fontWeight:700,fontSize:14}}>{i.title}</div><span style={S.badge(i.p==='สูง'?'#ffeef0':'#fff8e1',i.p==='สูง'?'#e17055':'#f39c12')}>{i.p}</span></div><div style={{fontSize:12,color:'#636e72'}}>{i.desc}</div></div></div>)}</div>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-      <div style={S.card}><div style={{fontWeight:700,marginBottom:16}}>Sentiment</div><div style={{position:'relative',width:160,height:160,margin:'0 auto'}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={sd} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3}>{sd.map((d,i)=><Cell key={i} fill={d.color}/>)}</Pie></PieChart></ResponsiveContainer><div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center'}}><div style={{fontSize:20,fontWeight:800,color:'#00b894'}}>68%</div><div style={{fontSize:10,color:'#b2bec3'}}>เชิงบวก</div></div></div></div>
-      <div style={S.card}><div style={{fontWeight:700,marginBottom:16}}>ประสิทธิภาพ</div><ResponsiveContainer width="100%" height={220}><RadarChart data={rd}><PolarGrid/><PolarAngleAxis dataKey="subject" tick={{fontSize:10}}/><PolarRadiusAxis angle={30} domain={[0,100]} tick={{fontSize:9}}/><Radar name="เดือนนี้" dataKey="A" stroke="#6c5ce7" fill="#6c5ce7" fillOpacity={0.3}/><Radar name="เดือนก่อน" dataKey="B" stroke="#b2bec3" fill="#b2bec3" fillOpacity={0.1}/></RadarChart></ResponsiveContainer></div>
+    
+    <div style={{display:'flex', gap:8, marginBottom:20, flexWrap:'wrap', alignItems:'center'}}>
+      <select value={filter} onChange={e=>setFilter(e.target.value)} style={{padding:'8px 14px', borderRadius:10, border:'1px solid '+T.border, background:'white', fontSize:13, cursor:'pointer', fontFamily:'inherit'}}>
+        <option value="all">🌐 ทุกแพลตฟอร์ม</option>
+        {PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+      </select>
+      {['all','published','scheduled','draft'].map(s => <button key={s} onClick={()=>setStatusFilter(s)} style={{padding:'8px 14px', borderRadius:10, border:'none', background: statusFilter===s?T.primary:'white', color: statusFilter===s?'white':T.gray, fontSize:12, cursor:'pointer', fontWeight:500, fontFamily:'inherit', boxShadow: statusFilter===s?'0 4px 12px rgba(108,92,231,0.25)':'0 2px 4px rgba(0,0,0,0.04)'}}>{s==='all'?'ทั้งหมด':s==='published'?'เผยแพร่':s==='scheduled'?'นัดเวลา':'ร่าง'}</button>)}
     </div>
-  </div>;
-};
-
-/* ═══ PAGE: ADMIN — จัดการผู้ใช้ + สิทธิ์ ═══ */
-const AdminPage = ({users, setUsers, pr, setPr}) => {
-  const [eu,sEu]=useState(null);const [ep,sEp]=useState([]);const [er,sEr]=useState('');
-  const app=r=>{setUsers(p=>[...p,{...r,id:Date.now(),role:'viewer',approved:true,permissions:['view_dashboard']}]);setPr(p=>p.filter(x=>x.username!==r.username));};
-  const rej=r=>setPr(p=>p.filter(x=>x.username!==r.username));
-  const stE=u=>{sEu(u.id);sEp([...(u.permissions||[])]);sEr(u.role);};
-  const svP=uid=>{setUsers(p=>p.map(u=>u.id===uid?{...u,permissions:ep,role:er}:u));sEu(null);};
-  const tP=pid=>sEp(p=>p.includes(pid)?p.filter(x=>x!==pid):[...p,pid]);
-  return <div style={{padding:'24px 28px',maxWidth:1200}}>
-    <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>⚙️ จัดการผู้ใช้และสิทธิ์</div>
-    <div style={{fontSize:13,color:'#b2bec3',marginBottom:20}}>กำหนดว่า username ไหนเข้าถึงฟังก์ชันไหนได้บ้าง</div>
-    {pr.length>0 && <div style={{background:'#fff3cd',borderRadius:14,padding:20,marginBottom:20,border:'1px solid #ffc107'}}><div style={{fontWeight:700,color:'#856404',marginBottom:12}}>📋 คำขอรออนุมัติ ({pr.length})</div>{pr.map((r,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:i<pr.length-1?'1px solid rgba(0,0,0,0.08)':'none'}}><div><div style={{fontWeight:600}}>{r.name}</div><div style={{fontSize:12,color:'#856404'}}>@{r.username}</div></div><div style={{display:'flex',gap:8}}><button onClick={()=>app(r)} style={S.btn('#00b894')}>✅ อนุมัติ</button><button onClick={()=>rej(r)} style={S.btn('#e17055')}>❌ ปฏิเสธ</button></div></div>)}</div>}
-    <div style={{...S.card,padding:0}}>
-      <div style={{padding:'16px 24px',borderBottom:'1px solid #f0f0f5',fontWeight:700}}>👥 ผู้ใช้ ({users.length})</div>
-      {users.map(u=><div key={u.id} style={{padding:'16px 24px',borderBottom:'1px solid #f0f0f5'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:eu===u.id?16:0,flexWrap:'wrap',gap:8}}>
-          <div style={{display:'flex',alignItems:'center',gap:12}}>
-            <div style={{width:40,height:40,borderRadius:'50%',background:u.role==='admin'?'linear-gradient(135deg,#6c5ce7,#a29bfe)':'#dfe6e9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:u.role==='admin'?'white':'#636e72'}}>{u.name?.[0]}</div>
-            <div><div style={{fontWeight:600}}>{u.name}</div><div style={{fontSize:12,color:'#b2bec3'}}>@{u.username} · {u.role}</div></div>
+    
+    {filtered.length > 0 ? <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:16}}>
+      {filtered.map(c => {
+        const p = PF(c.platform);
+        return <Card key={c.id} hover onClick={()=>setViewingContent(c)} style={{padding:0, overflow:'hidden'}}>
+          {c.imageUrl ? <div style={{width:'100%', height:160, background:'url('+c.imageUrl+') center/cover', position:'relative'}}>
+            <div style={{position:'absolute', top:8, right:8}}><Badge color="white" bg={p.color}>{p.icon} {p.name}</Badge></div>
+          </div> : <div style={{width:'100%', height:120, background: p.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:56}}>{p.icon}</div>}
+          <div style={{padding:16}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6, gap:8}}>
+              <div style={{fontWeight:700, fontSize:14, color:T.dark, flex:1, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical'}}>{c.title}</div>
+            </div>
+            <div style={{fontSize:11, color:T.gray, marginBottom:10, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden'}}>{c.description||'-'}</div>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div style={{display:'flex', gap:12, fontSize:11, color:T.gray}}>
+                <span>🤝 {fmt(c.engagement||0)}</span>
+                <span>📈 {fmt(c.reach||0)}</span>
+              </div>
+              <Badge color={c.status==='published'?T.success:c.status==='scheduled'?T.info:T.gray}>{c.status==='published'?'เผยแพร่':c.status==='scheduled'?'นัดเวลา':'ร่าง'}</Badge>
+            </div>
           </div>
-          <div style={{display:'flex',gap:8}}>
-            {eu===u.id ? <React.Fragment>
-              <select value={er} onChange={e=>sEr(e.target.value)} style={S.sel}><option value="admin">Admin</option><option value="editor">Editor</option><option value="viewer">Viewer</option></select>
-              <button onClick={()=>svP(u.id)} style={S.btn('#00b894')}>💾 บันทึก</button>
-              <button onClick={()=>sEu(null)} style={S.btnO('#636e72')}>ยกเลิก</button>
-            </React.Fragment> : <React.Fragment>
-              <button onClick={()=>stE(u)} style={S.btnO('#6c5ce7')}>✏️ แก้ไขสิทธิ์</button>
-              {u.id!==1 && <button onClick={()=>setUsers(p=>p.filter(x=>x.id!==u.id))} style={S.btnO('#e17055')}>🗑️</button>}
-            </React.Fragment>}
+        </Card>;
+      })}
+    </div> : <Card style={{padding:60, textAlign:'center'}}>
+      <div style={{fontSize:48, marginBottom:12}}>📭</div>
+      <div style={{fontSize:16, fontWeight:600, color:T.dark, marginBottom:4}}>ไม่พบคอนเทนต์</div>
+      <div style={{fontSize:13, color:T.gray, marginBottom:20}}>เริ่มสร้างคอนเทนต์แรกของคุณ</div>
+      <Btn variant="primary" onClick={openNew} icon="➕">สร้างคอนเทนต์</Btn>
+    </Card>}
+    
+    {/* View modal */}
+    <Modal open={!!viewingContent} onClose={()=>setViewingContent(null)} title={viewingContent?.title} width="600px"
+      footer={<React.Fragment>
+        <Btn variant="danger" onClick={()=>{del(viewingContent.id); setViewingContent(null);}} icon="🗑">ลบ</Btn>
+        <Btn variant="ghost" onClick={()=>setViewingContent(null)}>ปิด</Btn>
+        <Btn variant="primary" onClick={()=>{openEdit(viewingContent); setViewingContent(null);}} icon="✏️">แก้ไข</Btn>
+      </React.Fragment>}>
+      {viewingContent && <React.Fragment>
+        {viewingContent.imageUrl && <div style={{width:'100%', height:200, background:'url('+viewingContent.imageUrl+') center/cover', borderRadius:12, marginBottom:16}}/>}
+        <div style={{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}>
+          <Badge color={PF(viewingContent.platform).color}>{PF(viewingContent.platform).icon} {PF(viewingContent.platform).name}</Badge>
+          <Badge color={viewingContent.status==='published'?T.success:T.gray}>{viewingContent.status}</Badge>
+          <Badge color={T.info}>{viewingContent.type}</Badge>
+          <Badge color={T.gray}>📅 {viewingContent.date}</Badge>
+        </div>
+        <div style={{fontSize:14, color:T.dark, lineHeight:1.7, marginBottom:16}}>{viewingContent.description||'ไม่มีรายละเอียด'}</div>
+        {viewingContent.link && <a href={viewingContent.link} target="_blank" rel="noopener noreferrer" style={{display:'inline-flex', alignItems:'center', gap:6, color:T.primary, fontSize:13, textDecoration:'none', marginBottom:16}}>🔗 {viewingContent.link}</a>}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:16}}>
+          <div style={{padding:16, background:T.bg, borderRadius:12}}>
+            <div style={{fontSize:11, color:T.gray}}>🤝 Engagement</div>
+            <div style={{fontSize:24, fontWeight:800, color:T.dark}}>{fmt(viewingContent.engagement||0)}</div>
+          </div>
+          <div style={{padding:16, background:T.bg, borderRadius:12}}>
+            <div style={{fontSize:11, color:T.gray}}>📈 Reach</div>
+            <div style={{fontSize:24, fontWeight:800, color:T.dark}}>{fmt(viewingContent.reach||0)}</div>
           </div>
         </div>
-        {eu===u.id && <div style={{background:'#f8f7ff',borderRadius:10,padding:16,animation:'fadeInUp 0.3s'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#6c5ce7',marginBottom:10}}>กำหนดสิทธิ์การเข้าถึง:</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:8}}>
-            {PERMS.map(perm=><label key={perm.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',borderRadius:8,background:ep.includes(perm.id)?'rgba(108,92,231,0.08)':'transparent'}}>
-              <input type="checkbox" checked={ep.includes(perm.id)} onChange={()=>tP(perm.id)} style={{width:18,height:18,accentColor:'#6c5ce7'}}/>
-              <span style={{color:ep.includes(perm.id)?'#6c5ce7':'#636e72',fontWeight:ep.includes(perm.id)?600:400}}>{perm.label}</span>
-            </label>)}
+      </React.Fragment>}
+    </Modal>
+    
+    {/* Edit modal */}
+    <Modal open={showModal} onClose={()=>setShowModal(false)} title={editId?'✏️ แก้ไขคอนเทนต์':'✨ สร้างคอนเทนต์ใหม่'} width="600px"
+      footer={<React.Fragment>
+        <Btn variant="ghost" onClick={()=>setShowModal(false)}>ยกเลิก</Btn>
+        <Btn variant="primary" onClick={save} icon="💾">บันทึก</Btn>
+      </React.Fragment>}>
+      <Input label="หัวข้อ *" value={form.title} onChange={e=>setForm(p=>({...p, title:e.target.value}))} placeholder="ชื่อคอนเทนต์" icon="📝"/>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+        <Select label="แพลตฟอร์ม" value={form.platform} onChange={e=>setForm(p=>({...p, platform:e.target.value}))}
+          options={PLATFORMS.map(p=>({value:p.id, label:p.icon+' '+p.name}))}/>
+        <Select label="ประเภท" value={form.type} onChange={e=>setForm(p=>({...p, type:e.target.value}))}
+          options={['article','video','reels','carousel','thread','broadcast','story','live'].map(t=>({value:t, label:t}))}/>
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+        <Input label="วันที่" type="date" value={form.date} onChange={e=>setForm(p=>({...p, date:e.target.value}))}/>
+        <Select label="สถานะ" value={form.status} onChange={e=>setForm(p=>({...p, status:e.target.value}))}
+          options={[{value:'draft',label:'📝 ร่าง'},{value:'scheduled',label:'⏰ นัดเวลา'},{value:'published',label:'✅ เผยแพร่'}]}/>
+      </div>
+      <Input label="URL รูปภาพ" value={form.imageUrl} onChange={e=>setForm(p=>({...p, imageUrl:e.target.value}))} placeholder="https://... (ลิงก์รูป)" icon="🖼"/>
+      {form.imageUrl && <div style={{width:'100%', height:150, background:'url('+form.imageUrl+') center/cover', borderRadius:10, marginBottom:14, border:'1px solid '+T.border}}/>}
+      <Input label="ลิงก์คอนเทนต์" value={form.link} onChange={e=>setForm(p=>({...p, link:e.target.value}))} placeholder="https://..." icon="🔗"/>
+      <Textarea label="รายละเอียด" value={form.description} onChange={e=>setForm(p=>({...p, description:e.target.value}))} placeholder="คำอธิบายคอนเทนต์..." rows={3}/>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+        <Input label="🤝 Engagement" type="number" value={form.engagement} onChange={e=>setForm(p=>({...p, engagement:Number(e.target.value)||0}))}/>
+        <Input label="📈 Reach" type="number" value={form.reach} onChange={e=>setForm(p=>({...p, reach:Number(e.target.value)||0}))}/>
+      </div>
+    </Modal>
+  </div>
+  </PageWrap>;
+};
+
+/* ═══ MESSAGES / NOTES PAGE — chat + request system ═══ */
+const MsgPage = ({user, users, messages, setMessages, toast}) => {
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [text, setText] = useState('');
+  const [type, setType] = useState('message');
+  const [requestFor, setRequestFor] = useState('');
+  const [showRequest, setShowRequest] = useState(false);
+  const chatRef = useRef(null);
+  
+  const otherUsers = users.filter(u => u.username !== user.username && u.approved);
+  
+  const conversations = useMemo(() => {
+    const map = {};
+    messages.forEach(m => {
+      const other = m.fromUser === user.username ? m.toUser : (m.toUser === user.username ? m.fromUser : null);
+      if (!other) return;
+      if (!map[other]) map[other] = [];
+      map[other].push(m);
+    });
+    return map;
+  }, [messages, user.username]);
+  
+  const selectedMsgs = selectedUser ? (conversations[selectedUser] || []).sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)) : [];
+  
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [selectedMsgs]);
+  
+  const send = async () => {
+    if (!text.trim() || !selectedUser) return;
+    const msg = {
+      id: Date.now(), fromUser: user.username, toUser: selectedUser,
+      message: text, type, requestFor: type === 'request' ? requestFor : '',
+      status: type === 'request' ? 'pending' : 'sent',
+      createdAt: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, msg]);
+    if (USE_SHEETS) await api.post({action:'sendMessage', ...msg});
+    setText(''); setRequestFor(''); setType('message');
+    toast('ส่งแล้ว', 'success');
+  };
+  
+  const respondRequest = async (msg, status) => {
+    setMessages(prev => prev.map(m => m.id === msg.id ? {...m, status} : m));
+    if (USE_SHEETS) await api.post({action:'updateMessageStatus', messageId: msg.id, status});
+    toast('อัพเดทสถานะแล้ว', 'success');
+  };
+  
+  return <PageWrap keyId="messages">
+  <div style={{padding:'24px 28px', maxWidth:1400}}>
+    <div style={{marginBottom:20}}>
+      <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>💬 ข้อความ & คำขอ</div>
+      <div style={{fontSize:13, color:T.gray, marginTop:4}}>ส่งข้อความ ฝากโน้ต หรือขอไฟล์/ทรัพยากรจากทีม</div>
+    </div>
+    
+    <div style={{display:'grid', gridTemplateColumns:'280px 1fr', gap:16, height:'calc(100vh - 200px)', minHeight:500}}>
+      {/* User list */}
+      <Card style={{padding:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+        <div style={{padding:'14px 16px', borderBottom:'1px solid '+T.border, fontWeight:700, fontSize:14}}>👥 ผู้ใช้ ({otherUsers.length})</div>
+        <div style={{flex:1, overflowY:'auto'}}>
+          {otherUsers.map(u => {
+            const msgs = conversations[u.username] || [];
+            const last = msgs[msgs.length-1];
+            const unread = msgs.filter(m => m.toUser === user.username && m.status !== 'read').length;
+            const selected = selectedUser === u.username;
+            return <div key={u.username} onClick={()=>setSelectedUser(u.username)} style={{
+              padding:'12px 16px', borderBottom:'1px solid '+T.border, cursor:'pointer',
+              background: selected ? '#f8f7ff' : 'white',
+              borderLeft: selected ? '3px solid '+T.primary : '3px solid transparent',
+              transition:'all 0.2s', display:'flex', alignItems:'center', gap:10
+            }}>
+              <div style={{width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:14}}>{u.name?.[0]}</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <div style={{fontWeight:600, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{u.name}</div>
+                  {unread > 0 && <div style={{background:T.danger, color:'white', fontSize:10, padding:'2px 6px', borderRadius:10, fontWeight:700}}>{unread}</div>}
+                </div>
+                <div style={{fontSize:11, color:T.gray, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginTop:2}}>{last?.message || 'ยังไม่มีข้อความ'}</div>
+              </div>
+            </div>;
+          })}
+          {otherUsers.length === 0 && <div style={{padding:40, textAlign:'center', color:T.lightGray, fontSize:13}}>ไม่มีผู้ใช้อื่น</div>}
+        </div>
+      </Card>
+      
+      {/* Chat area */}
+      <Card style={{padding:0, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+        {selectedUser ? <React.Fragment>
+          <div style={{padding:'14px 20px', borderBottom:'1px solid '+T.border, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+            <div style={{display:'flex', alignItems:'center', gap:10}}>
+              <div style={{width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700}}>{users.find(u=>u.username===selectedUser)?.name?.[0]}</div>
+              <div>
+                <div style={{fontWeight:700, fontSize:14}}>{users.find(u=>u.username===selectedUser)?.name}</div>
+                <div style={{fontSize:11, color:T.gray}}>@{selectedUser}</div>
+              </div>
+            </div>
+            <Btn variant="outline" size="sm" onClick={()=>setShowRequest(true)} icon="📎">ส่งคำขอ</Btn>
+          </div>
+          
+          <div ref={chatRef} style={{flex:1, overflowY:'auto', padding:20, display:'flex', flexDirection:'column', gap:10, background:'linear-gradient(180deg,#fafafd,#fff)'}}>
+            {selectedMsgs.length > 0 ? selectedMsgs.map(m => {
+              const isMe = m.fromUser === user.username;
+              const isReq = m.type === 'request';
+              return <div key={m.id} style={{display:'flex', justifyContent: isMe?'flex-end':'flex-start'}}>
+                <div style={{
+                  maxWidth:'70%', padding:'12px 16px',
+                  borderRadius: isMe?'16px 16px 4px 16px':'16px 16px 16px 4px',
+                  background: isMe ? 'linear-gradient(135deg,#6c5ce7,#a29bfe)' : 'white',
+                  color: isMe ? 'white' : T.dark,
+                  boxShadow:'0 2px 6px rgba(0,0,0,0.05)',
+                  animation:'fadeSlideIn 0.3s'
+                }}>
+                  {isReq && <div style={{fontSize:11, opacity:0.9, marginBottom:6, display:'flex', alignItems:'center', gap:4}}>
+                    📎 <strong>คำขอ:</strong> {m.requestFor}
+                  </div>}
+                  <div style={{fontSize:14, whiteSpace:'pre-wrap'}}>{m.message}</div>
+                  <div style={{fontSize:10, marginTop:6, opacity:0.6, textAlign:'right'}}>
+                    {new Date(m.createdAt).toLocaleTimeString('th',{hour:'2-digit', minute:'2-digit'})}
+                  </div>
+                  {isReq && !isMe && m.status === 'pending' && <div style={{display:'flex', gap:6, marginTop:8}}>
+                    <button onClick={()=>respondRequest(m, 'approved')} style={{padding:'4px 12px', borderRadius:6, border:'none', background:T.success, color:'white', fontSize:11, cursor:'pointer', fontFamily:'inherit'}}>✓ อนุมัติ</button>
+                    <button onClick={()=>respondRequest(m, 'rejected')} style={{padding:'4px 12px', borderRadius:6, border:'none', background:T.danger, color:'white', fontSize:11, cursor:'pointer', fontFamily:'inherit'}}>✕ ปฏิเสธ</button>
+                  </div>}
+                  {isReq && m.status !== 'pending' && <div style={{marginTop:6}}>
+                    <Badge color={m.status==='approved'?T.success:T.danger}>{m.status==='approved'?'✓ อนุมัติแล้ว':'✕ ปฏิเสธแล้ว'}</Badge>
+                  </div>}
+                </div>
+              </div>;
+            }) : <div style={{textAlign:'center', color:T.lightGray, padding:40}}>
+              <div style={{fontSize:48, marginBottom:8}}>💭</div>
+              เริ่มการสนทนากับ {users.find(u=>u.username===selectedUser)?.name}
+            </div>}
+          </div>
+          
+          <div style={{padding:14, borderTop:'1px solid '+T.border, background:'white'}}>
+            <div style={{display:'flex', gap:8, alignItems:'flex-end'}}>
+              <textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); send();}}} placeholder="พิมพ์ข้อความ... (Enter เพื่อส่ง)" rows={1} style={{
+                flex:1, padding:'12px 14px', borderRadius:12, border:'1.5px solid #e4e6ea',
+                fontSize:14, outline:'none', resize:'none', fontFamily:'inherit', boxSizing:'border-box'
+              }}/>
+              <Btn variant="primary" onClick={send} icon="📤">ส่ง</Btn>
+            </div>
+          </div>
+        </React.Fragment> : <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:T.lightGray}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:64, marginBottom:12, opacity:0.4}}>💬</div>
+            <div style={{fontSize:16, fontWeight:600, color:T.gray}}>เลือกผู้ใช้เพื่อเริ่มสนทนา</div>
+            <div style={{fontSize:13, marginTop:4}}>ส่งข้อความ ฝากโน้ต หรือขอไฟล์</div>
           </div>
         </div>}
-        {eu!==u.id && u.permissions && <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>{u.permissions.map(pid=>{const p=PERMS.find(x=>x.id===pid);return p ? <span key={pid} style={S.badge('#f0f0f5','#636e72')}>{p.label}</span> : null;})}</div>}
-      </div>)}
+      </Card>
     </div>
-  </div>;
+    
+    {/* Request modal */}
+    <Modal open={showRequest} onClose={()=>setShowRequest(false)} title="📎 ส่งคำขอ" width="500px"
+      footer={<React.Fragment>
+        <Btn variant="ghost" onClick={()=>setShowRequest(false)}>ยกเลิก</Btn>
+        <Btn variant="primary" onClick={()=>{setType('request'); setShowRequest(false); toast('พิมพ์ข้อความเพิ่มเติมแล้วกดส่ง', 'info');}} icon="✓">ตั้งค่าคำขอ</Btn>
+      </React.Fragment>}>
+      <div style={{padding:12, background:T.bg, borderRadius:10, marginBottom:16, fontSize:12, color:T.gray}}>
+        💡 ระบบคำขอช่วยให้คุณขอไฟล์ ข้อมูล หรือทรัพยากรจากทีมได้ ผู้รับสามารถอนุมัติหรือปฏิเสธได้
+      </div>
+      <Input label="ต้องการอะไร" value={requestFor} onChange={e=>setRequestFor(e.target.value)} placeholder="เช่น ไฟล์รายงาน Q3, รูปโลโก้, ข้อมูลลูกค้า..." icon="📋"/>
+    </Modal>
+  </div>
+  </PageWrap>;
+};
+
+/* ═══ AI ANALYTICS PAGE — with content selection ═══ */
+const AIPage = ({user, entries, metrics, contents, toast}) => {
+  const [selectedContent, setSelectedContent] = useState(null);
+  const [prompt, setPrompt] = useState('');
+  const [action, setAction] = useState('analyze');
+  const [response, setResponse] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const actions = [
+    {id:'analyze', label:'วิเคราะห์ผลงาน', icon:'🔍', prompt:'วิเคราะห์คอนเทนต์นี้ในเชิงลึก จุดแข็ง จุดอ่อน และแนะนำวิธีปรับปรุง'},
+    {id:'improve', label:'แนะนำการพัฒนา', icon:'✨', prompt:'แนะนำวิธีพัฒนาคอนเทนต์นี้ให้ดีขึ้น ทั้งเนื้อหา การนำเสนอ และการกระจาย'},
+    {id:'rewrite', label:'เขียนใหม่', icon:'✍️', prompt:'ช่วยเขียนคอนเทนต์นี้ใหม่ให้น่าสนใจและดึงดูดผู้อ่านมากขึ้น'},
+    {id:'hashtag', label:'สร้าง Hashtag', icon:'#️⃣', prompt:'สร้าง hashtag ที่เหมาะสมสำหรับคอนเทนต์นี้ (10-15 tags)'},
+    {id:'caption', label:'สร้าง Caption', icon:'📝', prompt:'ช่วยเขียน caption ที่น่าสนใจสำหรับคอนเทนต์นี้ 3 แบบ ให้เลือก'},
+    {id:'schedule', label:'แนะนำเวลาโพสต์', icon:'⏰', prompt:'แนะนำเวลาที่ดีที่สุดในการโพสต์คอนเทนต์นี้ตามกลุ่มเป้าหมาย'},
+  ];
+  
+  const runAI = async () => {
+    const finalPrompt = prompt || actions.find(a => a.id === action)?.prompt;
+    if (!finalPrompt) { toast('เลือกการวิเคราะห์หรือพิมพ์คำสั่ง', 'error'); return; }
+    setLoading(true);
+    let context = '';
+    if (selectedContent) {
+      const c = contents.find(x => x.id === selectedContent);
+      if (c) context = `คอนเทนต์:\nหัวข้อ: ${c.title}\nแพลตฟอร์ม: ${PF(c.platform).name}\nประเภท: ${c.type}\nสถานะ: ${c.status}\nรายละเอียด: ${c.description||'-'}\nEngagement: ${c.engagement||0}\nReach: ${c.reach||0}`;
+    }
+    const resp = await askGemini(finalPrompt, context);
+    setResponse(resp);
+    setLoading(false);
+    if (USE_SHEETS) await api.post({action:'saveAIHistory', user:user.username, prompt:finalPrompt, response:resp, contentId:selectedContent||''});
+  };
+  
+  return <PageWrap keyId="ai">
+  <div style={{padding:'24px 28px', maxWidth:1200}}>
+    <div style={{marginBottom:24}}>
+      <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:6}}>
+        <div style={{width:52, height:52, borderRadius:14, background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, boxShadow:'0 8px 24px rgba(108,92,231,0.35)'}}>🤖</div>
+        <div>
+          <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>AI Analytics</div>
+          <div style={{fontSize:13, color:T.gray}}>ใช้ Gemini AI วิเคราะห์และพัฒนาคอนเทนต์</div>
+        </div>
+      </div>
+    </div>
+    
+    {/* Select content */}
+    <Card style={{marginBottom:16}}>
+      <div style={{fontWeight:700, fontSize:14, marginBottom:12}}>1️⃣ เลือกคอนเทนต์ (ไม่บังคับ)</div>
+      {contents.length > 0 ? <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:10, maxHeight:200, overflowY:'auto'}}>
+        <div onClick={()=>setSelectedContent(null)} style={{
+          padding:14, borderRadius:10, cursor:'pointer',
+          border: !selectedContent ? '2px solid '+T.primary : '2px solid '+T.border,
+          background: !selectedContent ? '#f8f7ff' : 'white',
+          fontSize:13, fontWeight:600, textAlign:'center', color: !selectedContent?T.primary:T.gray,
+          transition:'all 0.2s'
+        }}>🌐 ไม่เจาะจง</div>
+        {contents.slice(0,10).map(c => <div key={c.id} onClick={()=>setSelectedContent(c.id)} style={{
+          padding:12, borderRadius:10, cursor:'pointer',
+          border: selectedContent===c.id ? '2px solid '+T.primary : '2px solid '+T.border,
+          background: selectedContent===c.id ? '#f8f7ff' : 'white',
+          transition:'all 0.2s'
+        }}>
+          <div style={{fontSize:11, color:T.gray, marginBottom:4}}>{PF(c.platform).icon} {PF(c.platform).name}</div>
+          <div style={{fontSize:13, fontWeight:600, color:T.dark, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical'}}>{c.title}</div>
+        </div>)}
+      </div> : <div style={{padding:20, textAlign:'center', color:T.lightGray, fontSize:13}}>ยังไม่มีคอนเทนต์ ไปที่หน้า "คอนเทนต์" เพื่อสร้าง</div>}
+    </Card>
+    
+    {/* Action selection */}
+    <Card style={{marginBottom:16}}>
+      <div style={{fontWeight:700, fontSize:14, marginBottom:12}}>2️⃣ เลือกสิ่งที่ต้องการให้ AI ทำ</div>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10}}>
+        {actions.map(a => <div key={a.id} onClick={()=>{setAction(a.id); setPrompt('');}} style={{
+          padding:16, borderRadius:12, cursor:'pointer',
+          border: action===a.id ? '2px solid '+T.primary : '2px solid '+T.border,
+          background: action===a.id ? 'linear-gradient(135deg,#f8f7ff,#fff)' : 'white',
+          transition:'all 0.2s', textAlign:'center'
+        }}>
+          <div style={{fontSize:28, marginBottom:6}}>{a.icon}</div>
+          <div style={{fontSize:13, fontWeight:600, color: action===a.id?T.primary:T.dark}}>{a.label}</div>
+        </div>)}
+      </div>
+    </Card>
+    
+    {/* Custom prompt */}
+    <Card style={{marginBottom:16}}>
+      <div style={{fontWeight:700, fontSize:14, marginBottom:12}}>3️⃣ คำสั่งพิเศษ (ไม่บังคับ)</div>
+      <Textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder={`ปล่อยว่างเพื่อใช้คำสั่งเริ่มต้น: "${actions.find(a=>a.id===action)?.prompt}"`} rows={3} style={{marginBottom:12}}/>
+      <div style={{display:'flex', justifyContent:'flex-end'}}>
+        <Btn variant="primary" size="lg" onClick={runAI} loading={loading} icon="✨">เริ่มวิเคราะห์</Btn>
+      </div>
+    </Card>
+    
+    {/* Response */}
+    {response && <Card style={{background:'linear-gradient(135deg,#f8f7ff,#fff)', border:'1px solid #e0dcff', animation:'fadeSlideIn 0.4s'}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:16, paddingBottom:12, borderBottom:'1px solid #e0dcff'}}>
+        <div style={{width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, color:'white', boxShadow:'0 4px 12px rgba(108,92,231,0.3)'}}>🤖</div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700, fontSize:15}}>Gemini AI Response</div>
+          <div style={{fontSize:11, color:T.gray}}>{new Date().toLocaleString('th')}</div>
+        </div>
+      </div>
+      <div style={{fontSize:14, lineHeight:1.8, whiteSpace:'pre-wrap', color:T.dark}}>{response}</div>
+    </Card>}
+    
+    {!USE_GEMINI && <div style={{padding:16, borderRadius:12, background:'#fff8e1', border:'1px solid #ffc107', marginTop:16, fontSize:13, color:'#856404'}}>
+      ⚠️ <strong>ยังไม่ได้ตั้งค่า Gemini API</strong><br/>
+      1. เข้า <a href="https://aistudio.google.com/app/apikey" target="_blank" style={{color:T.primary}}>Google AI Studio</a><br/>
+      2. Create API Key<br/>
+      3. ใส่ในโค้ดตรง <code style={{background:'white', padding:'2px 6px', borderRadius:4}}>GEMINI_API_KEY</code>
+    </div>}
+  </div>
+  </PageWrap>;
+};
+
+/* ═══ ADMIN PAGE — user & permission management with modals ═══ */
+const AdminPage = ({user, users, setUsers, requests, setRequests, toast}) => {
+  const [approvingReq, setApprovingReq] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
+  const [tmpPerms, setTmpPerms] = useState([]);
+  const [tmpRole, setTmpRole] = useState('viewer');
+  
+  const openApprove = (req) => {
+    setApprovingReq(req);
+    setTmpPerms(['view_dashboard']);
+    setTmpRole('viewer');
+  };
+  const openEdit = (u) => {
+    setEditingUser(u);
+    setTmpPerms([...(u.permissions||[])]);
+    setTmpRole(u.role);
+  };
+  
+  const doApprove = async () => {
+    if (tmpPerms.length === 0) { toast('เลือกสิทธิ์อย่างน้อย 1 อย่าง', 'error'); return; }
+    const newUser = {
+      id: Date.now(), username: approvingReq.username, password: approvingReq.password,
+      name: approvingReq.name, role: tmpRole, approved: true, permissions: tmpPerms
+    };
+    setUsers(prev => [...prev, newUser]);
+    setRequests(prev => prev.filter(r => r.id !== approvingReq.id));
+    if (USE_SHEETS) await api.post({
+      action:'approveRequest', requestId: approvingReq.id,
+      permissions: tmpPerms, role: tmpRole, adminUser: user.username
+    });
+    setApprovingReq(null);
+    toast('อนุมัติสำเร็จและกำหนดสิทธิ์แล้ว', 'success');
+  };
+  
+  const doReject = async (req) => {
+    setRequests(prev => prev.filter(r => r.id !== req.id));
+    if (USE_SHEETS) await api.post({action:'rejectRequest', requestId: req.id, adminUser: user.username});
+    toast('ปฏิเสธคำขอแล้ว', 'info');
+  };
+  
+  const saveEdit = async () => {
+    setUsers(prev => prev.map(u => u.id === editingUser.id ? {...u, role: tmpRole, permissions: tmpPerms} : u));
+    if (USE_SHEETS) await api.post({
+      action:'updateUserPermissions', userId: editingUser.id,
+      role: tmpRole, permissions: tmpPerms, adminUser: user.username
+    });
+    setEditingUser(null);
+    toast('บันทึกสิทธิ์แล้ว', 'success');
+  };
+  
+  const delUser = async (u) => {
+    if (u.id === 1) { toast('ลบ Admin ไม่ได้', 'error'); return; }
+    if (!confirm('ยืนยันการลบผู้ใช้ '+u.name+'?')) return;
+    setUsers(prev => prev.filter(x => x.id !== u.id));
+    if (USE_SHEETS) await api.post({action:'deleteUser', userId: u.id, adminUser: user.username});
+    toast('ลบแล้ว', 'success');
+  };
+  
+  const togglePerm = (pid) => setTmpPerms(p => p.includes(pid) ? p.filter(x => x !== pid) : [...p, pid]);
+  
+  return <PageWrap keyId="admin">
+  <div style={{padding:'24px 28px', maxWidth:1200}}>
+    <div style={{marginBottom:24}}>
+      <div style={{fontSize:28, fontWeight:800, color:T.dark, letterSpacing:-0.5}}>⚙️ จัดการผู้ใช้และสิทธิ์</div>
+      <div style={{fontSize:13, color:T.gray, marginTop:4}}>อนุมัติผู้ใช้ใหม่ และกำหนดสิทธิ์การเข้าถึงฟังก์ชัน</div>
+    </div>
+    
+    {/* Pending requests */}
+    {requests.length > 0 && <Card style={{background:'linear-gradient(135deg,#fff8e1,#fffde7)', border:'1px solid #ffc107', marginBottom:20}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:16}}>
+        <div style={{width:40, height:40, borderRadius:12, background:'#ffc107', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20}}>📋</div>
+        <div>
+          <div style={{fontWeight:700, fontSize:16, color:'#856404'}}>คำขอเข้าใช้บริการ ({requests.length})</div>
+          <div style={{fontSize:12, color:'#856404'}}>กดอนุมัติเพื่อกำหนดสิทธิ์การเข้าถึง</div>
+        </div>
+      </div>
+      <div style={{display:'grid', gap:8}}>
+        {requests.map(req => <div key={req.id} style={{background:'white', padding:'14px 18px', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'space-between', boxShadow:'0 2px 8px rgba(0,0,0,0.04)'}}>
+          <div style={{display:'flex', alignItems:'center', gap:12}}>
+            <div style={{width:40, height:40, borderRadius:'50%', background:'#fff3cd', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, color:'#856404'}}>{req.name?.[0]}</div>
+            <div>
+              <div style={{fontWeight:600}}>{req.name}</div>
+              <div style={{fontSize:12, color:T.gray}}>@{req.username}</div>
+            </div>
+          </div>
+          <div style={{display:'flex', gap:8}}>
+            <Btn variant="success" size="sm" onClick={()=>openApprove(req)} icon="✓">อนุมัติ + กำหนดสิทธิ์</Btn>
+            <Btn variant="danger" size="sm" onClick={()=>doReject(req)} icon="✕">ปฏิเสธ</Btn>
+          </div>
+        </div>)}
+      </div>
+    </Card>}
+    
+    {/* User list */}
+    <Card style={{padding:0}}>
+      <div style={{padding:'16px 20px', borderBottom:'1px solid '+T.border, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+        <div style={{fontWeight:700, fontSize:16}}>👥 ผู้ใช้ทั้งหมด ({users.length})</div>
+      </div>
+      {users.map(u => <div key={u.id} style={{padding:'16px 20px', borderBottom:'1px solid '+T.border, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12}}>
+        <div style={{display:'flex', alignItems:'center', gap:12, flex:1, minWidth:200}}>
+          <div style={{width:44, height:44, borderRadius:'50%', background: u.role==='admin' ? 'linear-gradient(135deg,#6c5ce7,#a29bfe)' : '#dfe6e9', display:'flex', alignItems:'center', justifyContent:'center', color: u.role==='admin'?'white':T.gray, fontWeight:700, fontSize:16}}>{u.name?.[0]}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600, fontSize:14}}>{u.name} {u.role==='admin' && <Badge color={T.primary}>Admin</Badge>}</div>
+            <div style={{fontSize:12, color:T.gray}}>@{u.username}</div>
+            <div style={{display:'flex', gap:4, flexWrap:'wrap', marginTop:6}}>
+              {(u.permissions||[]).slice(0,4).map(pid => {
+                const p = PERMS.find(x=>x.id===pid);
+                return p ? <Badge key={pid} color={T.gray} bg={T.bg}>{p.icon} {p.label}</Badge> : null;
+              })}
+              {u.permissions?.length > 4 && <Badge color={T.gray} bg={T.bg}>+{u.permissions.length-4}</Badge>}
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex', gap:8}}>
+          <Btn variant="outline" size="sm" onClick={()=>openEdit(u)} icon="✏️">แก้ไขสิทธิ์</Btn>
+          {u.id !== 1 && <Btn variant="danger" size="sm" onClick={()=>delUser(u)} icon="🗑">ลบ</Btn>}
+        </div>
+      </div>)}
+    </Card>
+    
+    {/* Approve modal */}
+    <Modal open={!!approvingReq} onClose={()=>setApprovingReq(null)} title={`✅ อนุมัติ ${approvingReq?.name}`} width="600px"
+      footer={<React.Fragment>
+        <Btn variant="ghost" onClick={()=>setApprovingReq(null)}>ยกเลิก</Btn>
+        <Btn variant="success" onClick={doApprove} icon="✓">อนุมัติและกำหนดสิทธิ์</Btn>
+      </React.Fragment>}>
+      <div style={{padding:12, background:'#fff8e1', borderRadius:10, marginBottom:16, fontSize:12, color:'#856404'}}>
+        ⚠️ ต้องกำหนดสิทธิ์อย่างน้อย 1 อย่างก่อนอนุมัติ
+      </div>
+      <Select label="Role" value={tmpRole} onChange={e=>setTmpRole(e.target.value)}
+        options={[{value:'viewer',label:'👁 Viewer'},{value:'editor',label:'✏️ Editor'},{value:'admin',label:'⚙️ Admin'}]}/>
+      <div style={{fontWeight:600, fontSize:13, marginBottom:10, marginTop:6}}>กำหนดสิทธิ์การเข้าถึง:</div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+        {PERMS.map(p => <label key={p.id} style={{
+          display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
+          borderRadius:10, cursor:'pointer',
+          background: tmpPerms.includes(p.id) ? 'rgba(108,92,231,0.08)' : T.bg,
+          border: tmpPerms.includes(p.id) ? '2px solid '+T.primary : '2px solid transparent',
+          transition:'all 0.2s'
+        }}>
+          <input type="checkbox" checked={tmpPerms.includes(p.id)} onChange={()=>togglePerm(p.id)} style={{width:18, height:18, accentColor:T.primary, cursor:'pointer'}}/>
+          <span style={{fontSize:13, fontWeight: tmpPerms.includes(p.id)?600:400, color: tmpPerms.includes(p.id)?T.primary:T.dark}}>{p.icon} {p.label}</span>
+        </label>)}
+      </div>
+    </Modal>
+    
+    {/* Edit permissions modal */}
+    <Modal open={!!editingUser} onClose={()=>setEditingUser(null)} title={`✏️ แก้ไขสิทธิ์ ${editingUser?.name}`} width="600px"
+      footer={<React.Fragment>
+        <Btn variant="ghost" onClick={()=>setEditingUser(null)}>ยกเลิก</Btn>
+        <Btn variant="primary" onClick={saveEdit} icon="💾">บันทึก</Btn>
+      </React.Fragment>}>
+      <Select label="Role" value={tmpRole} onChange={e=>setTmpRole(e.target.value)}
+        options={[{value:'viewer',label:'👁 Viewer'},{value:'editor',label:'✏️ Editor'},{value:'admin',label:'⚙️ Admin'}]}/>
+      <div style={{fontWeight:600, fontSize:13, marginBottom:10, marginTop:6}}>สิทธิ์การเข้าถึง:</div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+        {PERMS.map(p => <label key={p.id} style={{
+          display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
+          borderRadius:10, cursor:'pointer',
+          background: tmpPerms.includes(p.id) ? 'rgba(108,92,231,0.08)' : T.bg,
+          border: tmpPerms.includes(p.id) ? '2px solid '+T.primary : '2px solid transparent',
+          transition:'all 0.2s'
+        }}>
+          <input type="checkbox" checked={tmpPerms.includes(p.id)} onChange={()=>togglePerm(p.id)} style={{width:18, height:18, accentColor:T.primary, cursor:'pointer'}}/>
+          <span style={{fontSize:13, fontWeight: tmpPerms.includes(p.id)?600:400, color: tmpPerms.includes(p.id)?T.primary:T.dark}}>{p.icon} {p.label}</span>
+        </label>)}
+      </div>
+    </Modal>
+  </div>
+  </PageWrap>;
 };
 
 /* ═══ MAIN APP ═══ */
 function App() {
-  const [cu, sCu] = useState(null);
-  const [users, sU] = useState(INIT_USERS);
-  const [page, sP] = useState('dashboard');
-  const [co, sCo] = useState(false);
-  const [pr, sPr] = useState([]);
+  const [user, setUser] = useState(null);
+  const [users, setUsers] = useState(INIT_USERS);
+  const [page, setPage] = useState('dashboard');
+  const [collapsed, setCollapsed] = useState(false);
   const [metrics, setMetrics] = useState(DEFAULT_METRICS);
-  const [entries, setEntries] = useState(() => genDemoData(DEFAULT_METRICS));
-  const [viewMode, setViewMode] = useState('all');
-
-  if (!cu) return <LoginPage users={users} onLogin={u=>{sCu(u);sP('dashboard');}} onReq={r=>sPr(p=>[...p,r])}/>;
-
-  const sw = co ? 70 : 240;
-  return <div style={{fontFamily:"'Prompt','Noto Sans Thai',sans-serif",minHeight:'100vh',background:'#f5f6fa'}}>
+  const [entries, setEntries] = useState([]);
+  const [contents, setContents] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const {show: toast, Toaster} = useToast();
+  
+  // Load data from Google Sheets
+  const loadAll = async () => {
+    if (!USE_SHEETS) return;
+    try {
+      const [u, m, e, c, msg, r] = await Promise.all([
+        api.get('getUsers'), api.get('getMetrics'), api.get('getEntries'),
+        api.get('getContent'), api.get('getMessages'), api.get('getRequests')
+      ]);
+      if (Array.isArray(u) && u.length > 0) setUsers(u);
+      if (Array.isArray(m) && m.length > 0) setMetrics(m);
+      if (Array.isArray(e)) setEntries(e);
+      if (Array.isArray(c)) setContents(c);
+      if (Array.isArray(msg)) setMessages(msg);
+      if (Array.isArray(r)) setRequests(r);
+    } catch(err) { console.error('Load error:', err); }
+  };
+  
+  useEffect(() => { loadAll(); }, []);
+  
+  if (!user) return <React.Fragment>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
-    <Sidebar page={page} setPage={sP} user={cu} onLogout={()=>sCu(null)} co={co} setCo={sCo}/>
-    <div style={{marginLeft:sw,transition:'margin-left 0.3s',minHeight:'100vh'}}>
-      <div style={{background:'white',padding:'12px 28px',borderBottom:'1px solid #f0f0f5',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,zIndex:50}}>
-        <div style={{fontSize:13,color:'#b2bec3'}}>{USE_SHEETS ? '🟢 เชื่อมต่อ Google Sheets' : '🟡 โหมด Demo'}</div>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <div style={{position:'relative',cursor:'pointer'}} onClick={()=>{if(pr.length>0&&cu.role==='admin')sP('admin');}}>🔔{pr.length>0 && <span style={{position:'absolute',top:-6,right:-6,width:16,height:16,borderRadius:'50%',background:'#e17055',color:'white',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>{pr.length}</span>}</div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,#6c5ce7,#a29bfe)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:14,fontWeight:700}}>{cu.name?.[0]}</div><div><div style={{fontSize:13,fontWeight:600}}>{cu.name}</div><div style={{fontSize:10,color:'#b2bec3'}}>{cu.role}</div></div></div>
+    <LoginPage users={users} onLogin={u => {setUser(u); loadAll();}} onRequestAccess={r => setRequests(p => [...p, {...r, id:Date.now()}])} toast={toast}/>
+    <Toaster/>
+  </React.Fragment>;
+  
+  const hasPerm = (p) => user.role === 'admin' || user.permissions?.includes(p);
+  const sw = collapsed ? 72 : 240;
+  
+  return <div style={{fontFamily:"'Prompt','Noto Sans Thai',sans-serif", minHeight:'100vh', background:T.bg}}>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <Sidebar page={page} setPage={setPage} user={user} onLogout={()=>setUser(null)} co={collapsed} setCo={setCollapsed}/>
+    <div style={{marginLeft:sw, transition:'margin-left 0.3s cubic-bezier(0.4,0,0.2,1)', minHeight:'100vh'}}>
+      {/* Top bar */}
+      <div style={{background:'white', padding:'14px 28px', borderBottom:'1px solid '+T.border, display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:50, backdropFilter:'blur(8px)'}}>
+        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+          <div style={{fontSize:11, color:T.gray}}>
+            {USE_SHEETS ? <span style={{color:T.success}}>🟢 Google Sheets</span> : <span style={{color:T.warning}}>🟡 Demo Mode</span>}
+            {' • '}
+            {USE_GEMINI ? <span style={{color:T.success}}>🟢 Gemini AI</span> : <span style={{color:T.warning}}>🟡 No AI</span>}
+          </div>
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:14}}>
+          {requests.length > 0 && user.role === 'admin' && <button onClick={()=>setPage('admin')} style={{position:'relative', background:'none', border:'none', cursor:'pointer', fontSize:20, padding:6, borderRadius:8}}>
+            🔔
+            <span style={{position:'absolute', top:0, right:0, background:T.danger, color:'white', fontSize:9, padding:'2px 6px', borderRadius:20, fontWeight:700}}>{requests.length}</span>
+          </button>}
+          <div style={{display:'flex', alignItems:'center', gap:10, padding:'6px 12px', borderRadius:12, background:T.bg}}>
+            <div style={{width:32, height:32, borderRadius:'50%', background:'linear-gradient(135deg,#6c5ce7,#a29bfe)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:13}}>{user.name?.[0]}</div>
+            <div><div style={{fontSize:13, fontWeight:600}}>{user.name}</div><div style={{fontSize:10, color:T.gray}}>{user.role}</div></div>
+          </div>
         </div>
       </div>
-
-      {page==='dashboard' && <DashPage entries={entries} metrics={metrics} viewMode={viewMode} setViewMode={setViewMode}/>}
-      {page==='data' && <DataPage entries={entries} setEntries={setEntries} metrics={metrics} setMetrics={setMetrics}/>}
-      {page==='reports' && <RepPage entries={entries} metrics={metrics}/>}
-      {page==='content' && <ConPage/>}
-      {page==='messages' && <MsgPage/>}
-      {page==='ads' && <AdsPage/>}
-      {page==='ai' && <AIPage entries={entries} metrics={metrics}/>}
-      {page==='admin' && (cu.role==='admin' ? <AdminPage users={users} setUsers={sU} pr={pr} setPr={sPr}/> : <div style={{padding:60,textAlign:'center',color:'#b2bec3'}}>🔒 ไม่มีสิทธิ์เข้าถึง</div>)}
+      
+      {/* Pages */}
+      {page==='dashboard' && hasPerm('view_dashboard') && <DashPage entries={entries} metrics={metrics}/>}
+      {page==='data' && hasPerm('edit_data') && <DataPage user={user} entries={entries} setEntries={setEntries} metrics={metrics} setMetrics={setMetrics} toast={toast} reload={loadAll}/>}
+      {page==='reports' && hasPerm('view_reports') && <RepPage user={user} entries={entries} metrics={metrics} toast={toast}/>}
+      {page==='content' && hasPerm('manage_content') && <ConPage user={user} contents={contents} setContents={setContents} toast={toast}/>}
+      {page==='messages' && hasPerm('view_messages') && <MsgPage user={user} users={users} messages={messages} setMessages={setMessages} toast={toast}/>}
+      {page==='ai' && hasPerm('ai_analytics') && <AIPage user={user} entries={entries} metrics={metrics} contents={contents} toast={toast}/>}
+      {page==='admin' && hasPerm('manage_users') && <AdminPage user={user} users={users} setUsers={setUsers} requests={requests} setRequests={setRequests} toast={toast}/>}
     </div>
-    <style>{`@keyframes fadeInUp{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <Toaster/>
+    <style>{`
+      @keyframes sp { to { transform: rotate(360deg); } }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+      @keyframes modalOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+      @keyframes slideInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+      @keyframes shakeX { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
+      @keyframes drift { 0% { transform: translate(0,0); } 100% { transform: translate(20px, -20px); } }
+      @keyframes bobble { 0% { transform: translateY(0); } 100% { transform: translateY(-6px); } }
+      body { margin: 0; -webkit-font-smoothing: antialiased; }
+      * { box-sizing: border-box; }
+    `}</style>
   </div>;
 }
 
-// Error boundary
 class ErrorBoundary extends React.Component {
   constructor(props){super(props);this.state={hasError:false,error:null};}
   static getDerivedStateFromError(error){return{hasError:true,error};}
